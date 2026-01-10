@@ -1,0 +1,19 @@
+AI filmmaker @pjacefilms created a Legend of Zelda fan trailer in 5 days on a $300 budget and shared his full workflow.
+
+1. He started by changing the tone, moving away from the bright Nintendo look and planning a darker, more grounded story with clear emotional beats.
+
+2. He mapped out iconic Hyrule locations and built a quick mood board so the scenes would stay consistent.
+
+3. For image generation, he used Nano Banana Pro inside Freepik, relying on character, style, and object references and sticking to 2x2 grids to keep lighting and angles consistent.
+
+4. He generated around 10 to 20 grids per scene, cropped the best shots, and arranged them in Figma to make everything feel cohesive.
+
+5. The selected images were then upscaled in Freepik using Nano Banana Pro.
+
+6. He animated the scenes using Kling 2.6, focusing on clear physical actions, handheld camera movement, and camera shake to sell realism.
+
+7. He finished the trailer with orchestral music and custom sound design.
+
+What used to take months and massive budgets can now be done in days by a single creator, with a few hundred dollars. And this is likely just the beginning...
+
+What are your thoughts on this? 🤔💬

@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# App Data & Secrets
+data/
+public/downloads/
+cookies.txt
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/

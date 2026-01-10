@@ -1,0 +1,7 @@
+👀 ChatGPT was asked to recreate the same image 200 times without changing anything, using the exact same prompt every single time. 
+
+Even so, small differences began to appear as the generations went on, with subtle changes in details, proportions, and textures.
+
+Generative AI doesn’t truly copy images, it interprets them, and even under strict instructions a bit of variation slowly creeps in. Perfect one to one replication sounds easy in theory, but in practice it’s much harder than it looks.
+
+What are your thoughts on this? 🤔💬

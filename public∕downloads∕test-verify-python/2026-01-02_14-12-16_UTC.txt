@@ -1,0 +1,11 @@
+"Vibe coding" is a term that only became popular recently, as AI tools started changing how software gets built. 
+
+Instead of writing every line by hand, you guide the system with intent. You explain what you want, tweak the output, and stay focused on the idea rather than the syntax.
+
+That’s exactly how Tony Stark worked. He spoke commands, moved things around, and let JARVIS handle the technical depth. He wasn’t typing code, but he was just directing it.
+
+What once felt like movie magic now mirrors how people build with AI today. Coding is shifting from manual execution to intent. 
+
+And Tony Stark was doing it years early.
+
+What are your thoughts on this? 🤔💬

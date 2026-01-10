@@ -1,0 +1,7 @@
+This uses Alibaba’s Wan 2.2-Animate to drop a new person into an existing shot.
+
+The scene stays the same. The actor changes. Lighting, skin, facial movement, and lip sync all line up without breaking the shot.
+
+At this point, it is getting genuinely hard to tell what was filmed and what was generated.
+
+🎥: @mikeyagainreels

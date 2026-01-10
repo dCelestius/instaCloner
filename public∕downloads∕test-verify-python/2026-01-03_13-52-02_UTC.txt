@@ -1,0 +1,8 @@
+This Google Earth flight simulator is fully open source. Built by a single developer and vibe coded in a short time, it lets you fly over real cities using real map data. The result feels like a live, interactive version of the planet itself. No closed platforms. No billion dollar backing.
+
+What matters is not just the simulator, but what it shows. Tools that once belonged only to governments or big tech are now accessible to individual creators. Mapping the world is no longer the end goal. The world itself is becoming programmable.
+
+You can find the code here:
+https://github.com/williamavholmberg
+
+🎮 @WilliamHolmbe19 on X
