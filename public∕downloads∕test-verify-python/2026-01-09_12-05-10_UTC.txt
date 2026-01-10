@@ -1,5 +1,0 @@
-From typing a sentence to seeing a response, there is a global system at work. 
-
-Networks route the request, data centers run the computation, and the result is sent back to your screen. 
-
-It happens so fast we forget how complex it really is.
