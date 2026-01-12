@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { getJob, createJobZip } from "@/app/actions"
 import { cn } from "@/lib/utils"
 import { SiteHeader } from "@/components/site-header"
+import { ProcessedVideoCard } from "@/components/processed-video-card"
 
 export default function ProcessingPage() {
     const params = useParams()
@@ -36,7 +37,7 @@ export default function ProcessingPage() {
                     setProcessedReels(processed)
                     setPendingReels(pending)
 
-                    const pct = Math.round((processed.length / approved.length) * 100)
+                    const pct = Math.round((processed.length / (approved.length || 1)) * 100)
                     setProgress(pct)
 
                     if (latestJob.status === "completed") {
@@ -120,27 +121,11 @@ export default function ProcessingPage() {
                                     damping: 30,
                                     mass: 0.8
                                 }}
-                                className="group relative aspect-[9/16] bg-black rounded-xl overflow-hidden border border-white/10 shadow-lg hover:border-emerald-500/50 transition-colors"
                             >
-                                <video
-                                    src={`/downloads/${job.id}/${reel.processed_path || reel.local_video_path}`}
-                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-                                    muted
-                                    loop
-                                    playsInline
-                                    onMouseOver={(e) => e.currentTarget.play()}
-                                    onMouseOut={(e) => e.currentTarget.pause()}
+                                <ProcessedVideoCard
+                                    reel={reel}
+                                    jobId={params.id as string}
                                 />
-
-                                <div className="absolute top-2 right-2 z-20">
-                                    <div className="bg-emerald-500 text-black text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-glow animate-pulse">
-                                        <CheckCircle className="w-3 h-3" /> READY
-                                    </div>
-                                </div>
-
-                                <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                    <p className="text-xs text-white truncate font-medium tracking-wide">{reel.id.slice(0, 8)}</p>
-                                </div>
                             </motion.div>
                         ))}
                     </AnimatePresence>

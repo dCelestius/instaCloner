@@ -230,16 +230,20 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
         logo_img = create_circular_logo(logo_path, logo_size)
         img.paste(logo_img, (logo_x, logo_y), logo_img)
     else:
-        # Optional Logo: don't draw it, and maybe shift text left? 
-        # For now, just skip deciding to leave empty space or not.
-        pass
+        # Drawing a circular placeholder with an emerald border for consistency
+        border_thickness = max(2, int(logo_size_px * 0.05))
+        draw.ellipse(
+            (logo_x, logo_y, logo_x + logo_size_px, logo_y + logo_size_px), 
+            outline="#10b981", # emerald-500
+            width=border_thickness
+        )
 
     # Name
     name_text = config.get('designName', 'User')
     font_bold = get_font(name_fs, bold=True)
     
-    # If no logo, shift left? Let's keep layout simple for now (logo space reserved)
-    name_x = logo_x + logo_size_px + int(padding * 0.5) if os.path.exists(logo_path) else padding
+    # Standardize name_x to keep layout consistent whether logo exists or not
+    name_x = logo_x + logo_size_px + int(padding * 0.5)
     name_y = logo_y 
     
     draw.text((name_x, name_y), name_text, font=font_bold, fill=name_color)
