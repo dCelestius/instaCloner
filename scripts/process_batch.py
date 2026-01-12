@@ -5,6 +5,10 @@ import subprocess
 import textwrap
 import traceback
 
+# Base directory for the frontend project
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(script_dir)
+
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageOps
 except ImportError:
@@ -194,14 +198,16 @@ def create_circular_logo(logo_path, size):
         return Image.new('RGBA', size, (100, 100, 100, 255))
 
 def get_font(size, bold=False):
-    font_names = [
+    font_paths = [
+        os.path.join(base_dir, "public", "fonts", "Montserrat-Regular.ttf"),
+        os.path.join(base_dir, "public", "fonts", "Montserrat-Light.ttf"),
         "Arial Bold.ttf" if bold else "Arial.ttf",
         "Helvetica-Bold" if bold else "Helvetica",
         "/System/Library/Fonts/Supplemental/Arial.ttf"
     ]
-    for name in font_names:
+    for path in font_paths:
         try:
-            return ImageFont.truetype(name, size)
+            return ImageFont.truetype(path, size)
         except:
             continue
     try:
@@ -249,13 +255,13 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     scale_factor = width / 380.0 
     
     # Config Values
-    logo_percent = config.get('logoSize', 12)
+    logo_percent = config.get('logoSize', 15)
     logo_size_px = int(width * (logo_percent / 100.0))
     
     name_fs = int(config.get('nameFontSize', 18) * scale_factor)
     name_color = config.get('nameColor', '#ffffff')
     
-    badge_size_px = int(config.get('badgeSize', 18) * scale_factor)
+    badge_size_px = int(config.get('badgeSize', 12) * scale_factor)
     
     handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
     handle_color = config.get('handleColor', '#94a3b8')
@@ -293,7 +299,7 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     font_bold = get_font(name_fs, bold=True)
     
     # Standardize name_x to keep layout consistent whether logo exists or not
-    name_x = logo_x + logo_size_px + int(padding * 0.5)
+    name_x = logo_x + logo_size_px + int(padding * 0.15) # Tighter horizontal gap
     name_y = logo_y 
     
     draw.text((name_x, name_y), name_text, font=font_bold, fill=name_color)
@@ -319,10 +325,31 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     # Handle
     handle_text = config.get('designHandle', '')
     if handle_text:
-        if not handle_text.startswith('@'): handle_text = f"@{handle_text}"
-        font_reg = get_font(handle_fs, bold=False)
-        handle_y = name_y + name_fs + int(padding * 0.1)
-        draw.text((name_x, handle_y), handle_text, font=font_reg, fill=handle_color)
+        if handle_text.startswith('@'): handle_text = handle_text[1:]
+        
+        # Try Montserrat specifically for the handle if possible
+        handle_font_path = os.path.join(base_dir, "public", "fonts", "Montserrat-Light.ttf")
+        if not os.path.exists(handle_font_path):
+            handle_font_path = os.path.join(base_dir, "public", "fonts", "Montserrat-Regular.ttf")
+            
+        try:
+            font_reg = ImageFont.truetype(handle_font_path, handle_fs)
+            font_at = ImageFont.truetype(handle_font_path, handle_fs + 2)
+        except:
+            font_reg = get_font(handle_fs, bold=False)
+            font_at = get_font(handle_fs + 2, bold=False) 
+        
+        handle_y = name_y + name_fs
+        
+        # Draw @ symbol first
+        draw.text((name_x, handle_y), "@", font=font_at, fill=handle_color)
+        
+        # Measure @ width to offset the rest of the handle
+        at_bbox = draw.textbbox((name_x, handle_y), "@", font=font_at)
+        at_width = at_bbox[2] - at_bbox[0]
+        
+        # Draw the rest of the handle name
+        draw.text((name_x + at_width, handle_y), handle_text, font=font_reg, fill=handle_color)
 
     # Headline
     show_headline_raw = config.get('showHeadline', True)
@@ -473,7 +500,7 @@ def process_batch(job_id):
                     # Calculate Design Content Height requirements
                     # (This is rough duplication of logic inside generate_design_overlay, but safest way)
                     scale_factor = width / 380.0
-                    logo_percent = config.get('logoSize', 12)
+                    logo_percent = config.get('logoSize', 15)
                     logo_size_px = int(width * (logo_percent / 100.0))
                     name_fs = int(config.get('nameFontSize', 18) * scale_factor)
                     handle_fs = int(config.get('handleFontSize', 14) * scale_factor)

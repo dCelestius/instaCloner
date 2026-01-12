@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import type { Metadata } from "next";
+import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import { useParams, useRouter } from "next/navigation"
 import { Wand2, Image as ImageIcon, Check, ChevronRight, Upload, X, RotateCcw, LayoutTemplate } from "lucide-react"
 
@@ -33,16 +35,16 @@ export default function ConfigurePage() {
     // Design Mode State
     const [designLogo, setDesignLogo] = useState<string | null>(null)
     const [designLogoFile, setDesignLogoFile] = useState<File | null>(null)
-    const [logoSize, setLogoSize] = useState(12) // percentage relative to width, default 12
+    const [logoSize, setLogoSize] = useState(15) // Increased default to 15
 
     const [designName, setDesignName] = useState("Your Name")
-    const [nameFontSize, setNameFontSize] = useState(18)
+    const [nameFontSize, setNameFontSize] = useState(13)
     const [nameColor, setNameColor] = useState("#ffffff")
 
-    const [badgeSize, setBadgeSize] = useState(18)
+    const [badgeSize, setBadgeSize] = useState(12)
 
     const [designHandle, setDesignHandle] = useState("username")
-    const [handleFontSize, setHandleFontSize] = useState(14)
+    const [handleFontSize, setHandleFontSize] = useState(12)
     const [handleColor, setHandleColor] = useState("#94a3b8") // slate-400
 
     const [designBgColor, setDesignBgColor] = useState("#000000")
@@ -504,7 +506,7 @@ export default function ConfigurePage() {
                                     }}
                                 >
                                     {/* Header Strip */}
-                                    <div className="w-full pl-[22px] pr-4 py-3 flex items-center gap-4 shrink-0">
+                                    <div className="w-full pl-[22px] pr-4 py-3 flex items-center gap-2 shrink-0">
                                         <div style={{ width: `${logoSize * 2.5}px`, height: `${logoSize * 2.5}px` }}> {/* rough multiplier for preview scale */}
                                             {designLogo ? (
                                                 <img src={designLogo} className="w-full h-full rounded-full border border-white object-cover" />
@@ -529,12 +531,15 @@ export default function ConfigurePage() {
                                                     style={{ width: `${badgeSize}px`, height: `${badgeSize}px` }}
                                                 />
                                             </div>
-                                            <span
-                                                className="font-medium truncate mt-0.5"
-                                                style={{ fontSize: `${handleFontSize}px`, color: handleColor }}
-                                            >
-                                                {designHandle.startsWith('@') ? designHandle : (designHandle ? '@' + designHandle : '')}
-                                            </span>
+                                            <div className="flex items-center" style={{ color: handleColor }}>
+                                                <span className="font-light font-montserrat" style={{ fontSize: `${handleFontSize + 2}px` }}>@</span>
+                                                <span
+                                                    className="font-light truncate font-montserrat"
+                                                    style={{ fontSize: `${handleFontSize}px` }}
+                                                >
+                                                    {designHandle.startsWith('@') ? designHandle.substring(1) : designHandle}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 
