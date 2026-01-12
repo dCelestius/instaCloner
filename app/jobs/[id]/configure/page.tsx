@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { SiteHeader } from "@/components/site-header"
 import { cn } from "@/lib/utils"
 // Server action
-import { getJob, startProcessingJob } from "@/app/actions"
+import { getJob, startProcessingJob, getLatestPreset } from "@/app/actions"
 
 export default function ConfigurePage() {
     const params = useParams()
@@ -77,6 +77,38 @@ export default function ConfigurePage() {
         }
         fetchData()
     }, [params.id])
+
+    // Load Presets
+    useEffect(() => {
+        async function loadPresets() {
+            const preset = await getLatestPreset()
+            if (preset) {
+                if (preset.designName) setDesignName(preset.designName)
+                if (preset.designHandle) setDesignHandle(preset.designHandle)
+                if (preset.designBgColor) setDesignBgColor(preset.designBgColor)
+                if (preset.designOpacity) setDesignOpacity(preset.designOpacity)
+                if (preset.logoSize) setLogoSize(preset.logoSize)
+                if (preset.nameFontSize) setNameFontSize(preset.nameFontSize)
+                if (preset.nameColor) setNameColor(preset.nameColor)
+                if (preset.badgeSize) setBadgeSize(preset.badgeSize)
+                if (preset.handleFontSize) setHandleFontSize(preset.handleFontSize)
+                if (preset.handleColor) setHandleColor(preset.handleColor)
+                if (preset.headlineFontSize) setHeadlineFontSize(preset.headlineFontSize)
+                if (preset.headlineColor) setHeadlineColor(preset.headlineColor)
+                if (preset.headlineMode) setHeadlineMode(preset.headlineMode)
+                if (preset.manualHeadline) setManualHeadline(preset.manualHeadline)
+                if (preset.showHeadline !== undefined) setShowHeadline(preset.showHeadline)
+
+                if (preset.designLogo) {
+                    setDesignLogo(preset.designLogo)
+                    // Note: We don't set designLogoFile because we can't recreate a File object 
+                    // from a URL easily, but the server action will use the PERSISTED_LOGO_PATH 
+                    // if it exists, or the user can re-upload.
+                }
+            }
+        }
+        loadPresets()
+    }, [])
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isLogo = false) => {
         if (e.target.files && e.target.files[0]) {
@@ -507,7 +539,7 @@ export default function ConfigurePage() {
                                 >
                                     {/* Header Strip */}
                                     <div className="w-full pl-[22px] pr-4 py-3 flex items-center gap-2 shrink-0">
-                                        <div style={{ width: `${logoSize * 2.5}px`, height: `${logoSize * 2.5}px` }}> {/* rough multiplier for preview scale */}
+                                        <div style={{ width: `${logoSize}%`, aspectRatio: '1/1' }}>
                                             {designLogo ? (
                                                 <img src={designLogo} className="w-full h-full rounded-full border border-white object-cover" />
                                             ) : (

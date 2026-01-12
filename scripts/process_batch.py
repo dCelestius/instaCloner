@@ -188,7 +188,10 @@ def create_circular_logo(logo_path, size):
         output = Image.new('RGBA', size, (0, 0, 0, 0))
         output.paste(img, (0, 0), mask)
         
-        border_thickness = max(2, int(size[0] * 0.05))
+        # Border thickness: scale_factor * 1.5 roughly equals 1px visual border
+        # We need to pass the scale_factor here or calculate it. 
+        # For now, let's use a more subtle relative calculation.
+        border_thickness = max(1, int(size[0] * 0.02)) 
         draw_overlay = ImageDraw.Draw(output)
         draw_overlay.ellipse((0, 0, size[0]-1, size[1]-1), outline="white", width=border_thickness)
         
@@ -254,40 +257,47 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     # Scale Factors
     scale_factor = width / 380.0 
     
+    # compensated scaling for PIL fonts vs CSS
+    FONT_SCALE = 1.35 
+    
     # Config Values
     logo_percent = config.get('logoSize', 15)
     logo_size_px = int(width * (logo_percent / 100.0))
     
-    name_fs = int(config.get('nameFontSize', 18) * scale_factor)
+    name_fs = int(config.get('nameFontSize', 18) * scale_factor * FONT_SCALE)
     name_color = config.get('nameColor', '#ffffff')
     
     badge_size_px = int(config.get('badgeSize', 12) * scale_factor)
     
-    handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
+    handle_fs = int(config.get('handleFontSize', 14) * scale_factor * FONT_SCALE)
     handle_color = config.get('handleColor', '#94a3b8')
     
-    headline_fs = int(config.get('headlineFontSize', 24) * scale_factor)
+    headline_fs = int(config.get('headlineFontSize', 24) * scale_factor * FONT_SCALE)
     headline_color = config.get('headlineColor', '#ffffff')
     
-    padding = int(width * 0.04)
+    padding_left = int(22 * scale_factor) # pl-[22px]
+    padding_vertical = int(12 * scale_factor) # py-3 (0.75rem = 12px)
+    gap_horizontal = int(8 * scale_factor) # gap-2 (0.5rem = 8px)
     
     # --- Content Positioning ---
     
     # Logo
     logo_size = (logo_size_px, logo_size_px)
-    logo_x = int(padding * 1.25) # Increased left margin for better balance
-    # Align content relative to the banner start + internal padding
-    content_start_y = start_y + content_padding_top
+    logo_x = padding_left
+    # Align content relative to the banner start + vertical padding
+    content_start_y = start_y + padding_vertical
     
-    logo_y = content_start_y
+    # Micro-adjust logo up slightly for better visual balance
+    logo_y = content_start_y - int(3.5 * scale_factor)
     
     logo_path = os.path.join(job_dir, "logo.png")
     if os.path.exists(logo_path):
+        # We use a finer border logic in create_circular_logo now
         logo_img = create_circular_logo(logo_path, logo_size)
         img.paste(logo_img, (logo_x, logo_y), logo_img)
     else:
         # Drawing a circular placeholder with an emerald border for consistency
-        border_thickness = max(2, int(logo_size_px * 0.05))
+        border_thickness = max(1, int(logo_size_px * 0.02))
         draw.ellipse(
             (logo_x, logo_y, logo_x + logo_size_px, logo_y + logo_size_px), 
             outline="#10b981", # emerald-500
@@ -299,7 +309,7 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     font_bold = get_font(name_fs, bold=True)
     
     # Standardize name_x to keep layout consistent whether logo exists or not
-    name_x = logo_x + logo_size_px + int(padding * 0.15) # Tighter horizontal gap
+    name_x = logo_x + logo_size_px + gap_horizontal
     name_y = logo_y 
     
     draw.text((name_x, name_y), name_text, font=font_bold, fill=name_color)
@@ -315,7 +325,7 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
             badge_img = Image.open(badge_path).convert("RGBA")
             badge_img = ImageOps.fit(badge_img, b_size, centering=(0.5, 0.5))
             
-            badge_x = name_x + name_w + int(padding * 0.2)
+            badge_x = name_x + name_w + int(8 * scale_factor)
             badge_y_pos = name_y + (name_fs // 2) - (badge_size_px // 2)
             img.paste(badge_img, (badge_x, badge_y_pos), badge_img)
         except Exception as e:
@@ -360,11 +370,13 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
         
         if headline_text:
             font_head = get_font(headline_fs, bold=False)
-            text_x = padding
-            text_y = logo_y + logo_size_px + int(padding * 0.5)
+            text_x = int(24 * scale_factor) # px-6
+            # text_y = header_strip_bottom + pt-2
+            # header_strip_bottom = logo_y + logo_size_px + padding_vertical
+            text_y = logo_y + logo_size_px + padding_vertical + int(8 * scale_factor)
             
             avg_char_width = headline_fs * 0.5
-            max_chars = int((width - (padding * 2)) / avg_char_width)
+            max_chars = int((width - (text_x * 2)) / avg_char_width)
             lines = textwrap.wrap(headline_text, width=max_chars)
             
             for line in lines:
@@ -566,7 +578,7 @@ def process_batch(job_id):
             *ffmpeg_inputs,
             '-filter_complex', filter_complex,
             '-c:a', 'copy',
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
              output_path
         ]
         

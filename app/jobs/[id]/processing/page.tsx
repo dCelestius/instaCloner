@@ -53,26 +53,11 @@ export default function ProcessingPage() {
             }
         }
 
-        // Job Cancellation on Close/Navigate
-        const handleCancel = () => {
-            if (!isDone) {
-                cancelJob(jobId)
-            }
-        }
-
-        window.addEventListener('beforeunload', handleCancel)
-
         checkStatus()
         interval = setInterval(checkStatus, 3000) // Poll every 3s
 
         return () => {
-            window.removeEventListener('beforeunload', handleCancel)
             clearInterval(interval)
-
-            // Trigger cancellation on component unmount (React navigation)
-            if (!isDone) {
-                cancelJob(jobId)
-            }
         }
     }, [jobId])
 

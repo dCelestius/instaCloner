@@ -9,6 +9,8 @@ import { redirect } from "next/navigation"
 
 const execAsync = promisify(exec)
 const DB_PATH = path.join(process.cwd(), "data", "jobs.json")
+const PRESET_PATH = path.join(process.cwd(), "data", "presets.json")
+const PERSISTED_LOGO_PATH = path.join(process.cwd(), "public", "persistent", "logo.png")
 
 // Track active child processes by jobId
 const activeJobs = new Map<string, any>()
@@ -210,11 +212,17 @@ export async function startProcessingJob(formData: FormData) {
         const headlineMode = formData.get("headlineMode") as string
         const manualHeadline = formData.get("manualHeadline") as string
 
-        if (designLogo) {
+        if (designLogo && designLogo.size > 0) {
             const arrayBuffer = await designLogo.arrayBuffer()
             const buffer = Buffer.from(arrayBuffer)
             const logoPath = path.join(jobDirAbs, "logo.png")
             await fs.writeFile(logoPath, buffer)
+        } else {
+            // Fallback: If no new logo provided, check for persisted default
+            try {
+                await fs.access(PERSISTED_LOGO_PATH)
+                await fs.copyFile(PERSISTED_LOGO_PATH, path.join(jobDirAbs, "logo.png"))
+            } catch { }
         }
 
         config.designName = designName
@@ -241,6 +249,12 @@ export async function startProcessingJob(formData: FormData) {
     console.log(`[Job ${jobId}] Generated Context:`, JSON.stringify(config, null, 2))
 
     if (db[jobId]) {
+        // Idempotency: Don't start if already processing or completed
+        if (db[jobId].status === "processing" && activeJobs.has(jobId)) {
+            console.log(`[Job ${jobId}] Already processing. Skipping spawn.`)
+            return { success: true }
+        }
+
         db[jobId].status = "processing"
         db[jobId].config = config
     }
@@ -261,6 +275,18 @@ export async function startProcessingJob(formData: FormData) {
     })
 
     activeJobs.set(jobId, child)
+
+    // SAVE PRESET for next time
+    if (mode === 'design') {
+        const logoPath = path.join(jobDirAbs, "logo.png")
+        let logoToSave = undefined
+        try {
+            await fs.access(logoPath)
+            logoToSave = logoPath
+        } catch { }
+
+        await savePreset(config, logoToSave)
+    }
 
     return { success: true }
 }
@@ -321,4 +347,38 @@ export async function createJobZip(jobId: string) {
             resolve(`/downloads/${jobId}/${zipName}`)
         })
     })
+}
+
+export async function getLatestPreset() {
+    try {
+        await ensureDb()
+        const data = await fs.readFile(PRESET_PATH, "utf-8")
+        const preset = JSON.parse(data)
+
+        // Check if public logo exists
+        try {
+            await fs.access(PERSISTED_LOGO_PATH)
+            preset.designLogo = "/persistent/logo.png"
+        } catch { }
+
+        return preset
+    } catch {
+        return null
+    }
+}
+
+export async function savePreset(config: any, logoPath?: string) {
+    try {
+        await ensureDb()
+
+        if (logoPath) {
+            const dir = path.dirname(PERSISTED_LOGO_PATH)
+            await fs.mkdir(dir, { recursive: true })
+            await fs.copyFile(logoPath, PERSISTED_LOGO_PATH)
+        }
+
+        await fs.writeFile(PRESET_PATH, JSON.stringify(config, null, 2), "utf-8")
+    } catch (e) {
+        console.error("Failed to save preset", e)
+    }
 }
