@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Loader2, Download, CheckCircle, ArrowLeft, Play, FileVideo } from "lucide-react"
+import { Loader2, Download, CheckCircle, ArrowLeft, Play } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { getJob, createJobZip } from "@/app/actions"
@@ -107,19 +107,24 @@ export default function ProcessingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 
                     <AnimatePresence mode="popLayout">
-                        {/* Processed Cards (Animated In) */}
+                        {/* Processed Cards (Animated In Sequentially) */}
                         {processedReels.map((reel) => (
                             <motion.div
                                 key={reel.id}
                                 layout
-                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                initial={{ opacity: 0, scale: 0.8, y: 50 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                                transition={{ duration: 0.3 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 30,
+                                    mass: 0.8
+                                }}
                                 className="group relative aspect-[9/16] bg-black rounded-xl overflow-hidden border border-white/10 shadow-lg hover:border-emerald-500/50 transition-colors"
                             >
                                 <video
                                     src={`/downloads/${job.id}/${reel.processed_path || reel.local_video_path}`}
-                                    className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
+                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
                                     muted
                                     loop
                                     playsInline
@@ -128,34 +133,13 @@ export default function ProcessingPage() {
                                 />
 
                                 <div className="absolute top-2 right-2 z-20">
-                                    <div className="bg-emerald-500 text-black text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-glow">
+                                    <div className="bg-emerald-500 text-black text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-glow animate-pulse">
                                         <CheckCircle className="w-3 h-3" /> READY
                                     </div>
                                 </div>
 
-                                <div className="absolute bottom-0 left-0 w-full p-3 bg-gradient-to-t from-black/80 to-transparent">
-                                    <p className="text-xs text-white truncate font-medium">{reel.id.slice(0, 8)}...</p>
-                                </div>
-                            </motion.div>
-                        ))}
-
-                        {/* Pending Cards (Skeletons) */}
-                        {pendingReels.map((reel) => (
-                            <motion.div
-                                key={reel.id}
-                                layout
-                                initial={{ opacity: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="relative aspect-[9/16] bg-slate-900 rounded-xl overflow-hidden border border-dashed border-white/10 flex flex-col items-center justify-center p-4 gap-3 text-slate-600"
-                            >
-                                <div className="w-12 h-12 rounded-full border-2 border-slate-800 flex items-center justify-center animate-pulse">
-                                    <FileVideo className="w-5 h-5 opacity-50" />
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-xs font-mono mb-1">Queue #{reel.id.slice(0, 4)}</p>
-                                    <div className="h-1 w-16 bg-zinc-800 rounded-full overflow-hidden mx-auto">
-                                        <div className="h-full w-1/2 bg-emerald-500/50 animate-progress" />
-                                    </div>
+                                <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <p className="text-xs text-white truncate font-medium tracking-wide">{reel.id.slice(0, 8)}</p>
                                 </div>
                             </motion.div>
                         ))}

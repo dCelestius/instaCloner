@@ -459,7 +459,7 @@ def process_batch(job_id):
                 # Overlay is full frame? No, generate_design_overlay creates full frame image
                 # So we just overlay at 0:0
                 filter_complex = "[0:v][1:v]overlay=0:0:shortest=1"
-                ffmpeg_inputs = ['-i', temp_overlay_path]
+                ffmpeg_inputs = ['-loop', '1', '-i', temp_overlay_path]
                 
             except Exception as e:
                 print(f"Design Generation Error: {e}")
