@@ -36,9 +36,10 @@ def get_video_dimensions(input_path):
         print(f"Error getting dimensions for {input_path}: {e}")
         return None
 
-def detect_header_height(video_path, total_height):
+def detect_header_height(video_path, total_height, show_headline=True):
     """
-    Analyzes video to find the UI header area.
+    Analyzes video at multiple timestamps to find the UI header area.
+    If show_headline is False, it strictly isolates the profile row (name/handle).
     Returns (final_y, final_h, content_padding)
     """
     if not OPENCV_AVAILABLE:
@@ -47,78 +48,124 @@ def detect_header_height(video_path, total_height):
 
     try:
         cap = cv2.VideoCapture(video_path)
-        # Read a frame from early in the video (e.g. 1 sec in) to clear transitions
-        cap.set(cv2.CAP_PROP_POS_MSEC, 1000)
-        ret, frame = cap.read()
+        
+        # Sample multiple frames to be more robust against transitions/animations
+        # (Timestamps in ms: 500, 1500, 2500)
+        timestamps = [500, 1500, 2500]
+        detected_envelopes = []
+
+        for ts in timestamps:
+            cap.set(cv2.CAP_PROP_POS_MSEC, ts)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            h, w, _ = frame.shape
+            
+            # Region of Interest: Top 25% (Headers are rarely lower than this)
+            roi_h = int(h * 0.25)
+            roi = frame[0:roi_h, 0:w]
+            
+            # Preprocessing
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            # Blur to merge text blocks
+            blurred = cv2.GaussianBlur(gray, (25, 25), 0)
+            edges = cv2.Canny(blurred, 30, 100)
+            
+            # Dilate to connect components
+            # Moderate vertical dilation to bridge text lines without merging status bar
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 8))
+            dilated = cv2.dilate(edges, kernel, iterations=2)
+            
+            contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            frame_top = h
+            frame_bottom = 0
+            found_in_frame = False
+            
+            # Thresholds for filtering noise (resolution-aware)
+            # 5% of width is enough to catch "Evolving AI" but skip tiny dots
+            min_w = w * 0.05  
+            min_h = h * 0.005 
+            # Skip top 4% to avoid OS status bar (clock/battery/pill)
+            status_bar_h = h * 0.04 
+            
+            valid_rects = []
+            for cnt in contours:
+                x, y, w_rect, h_rect = cv2.boundingRect(cnt)
+                
+                # Filter noise
+                if w_rect < min_w: continue 
+                if h_rect < min_h: continue 
+                if y < status_bar_h: continue # Skips OS status bar
+                
+                valid_rects.append((y, y + h_rect))
+
+            if valid_rects:
+                if not show_headline:
+                    # ULTRA-SLIM: Isolate ONLY the top-most cohesive row (Profile Row)
+                    # We sort by Y and only keep the first "cluster"
+                    valid_rects.sort(key=lambda r: r[0])
+                    first_y = valid_rects[0][0]
+                    # Anything starting within 3% of the first element is part of the same "row"
+                    row_threshold = h * 0.03
+                    profile_rects = [r for r in valid_rects if r[0] < (first_y + row_threshold)]
+                    
+                    frame_top = min(r[0] for r in profile_rects)
+                    frame_bottom = max(r[1] for r in profile_rects)
+                else:
+                    # Normal: Take full UI envelope (Name + Headline)
+                    frame_top = min(r[0] for r in valid_rects)
+                    frame_bottom = max(r[1] for r in valid_rects)
+                
+                found_in_frame = True
+            
+            if found_in_frame:
+                detected_envelopes.append((frame_top, frame_bottom))
+
         cap.release()
 
-        if not ret:
-            print("Failed to read video frame for detection")
+        if not detected_envelopes:
+            print("No header structure detected in sampled frames. Using default.")
             return 0, int(total_height * 0.15), 20
 
-        h, w, _ = frame.shape
+        # Aggregate: Use min top and max bottom across all frames for full coverage
+        ui_top = min(e[0] for e in detected_envelopes)
+        ui_bottom = max(e[1] for e in detected_envelopes)
         
-        # Region of Interest: Top 50%
-        roi_h = int(h * 0.50)
-        roi = frame[0:roi_h, 0:w]
-        
-        # Preprocessing
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        # Blur to merge text blocks
-        blurred = cv2.GaussianBlur(gray, (25, 25), 0)
-        edges = cv2.Canny(blurred, 30, 100)
-        
-        # Dilate to connect components
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 5))
-        dilated = cv2.dilate(edges, kernel, iterations=2)
-        
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        ui_top = 0
-        ui_bottom = 0
-        found = False
-        
-        # Look for the lowest significant rectangle in the top area (The Headline)
-        # Ignore very small stuff at very top (status bar)
-        for cnt in contours:
-            x, y, w_rect, h_rect = cv2.boundingRect(cnt)
-            
-            # Filter noise
-            if w_rect < w * 0.2: continue # Too narrow
-            if h_rect < 20: continue # Too short
-            if y < 60: continue # Likely status bar
-            
-            # We want the lowest one found so far in our top scan
-            current_bottom = y + h_rect
-            if current_bottom > ui_bottom:
-                ui_bottom = current_bottom
-                ui_top = y # Track its top too
-                found = True
+        # Scaling Factors (based on 1920p original targets)
+        if not show_headline:
+            # PERFECT-FIT: Balancing slimmness with breathing room
+            rel_shift_up = int(total_height * 0.02) # Balanced at 2%
+            rel_buffer = int(total_height * 0.005)  # 0.5% cushion
+            rel_safety_floor = int(total_height * 0.02) # 2% floor
+            snap_threshold = 0.02 # Only snap if touching top 2%
+        else:
+            rel_shift_up = int(total_height * 0.11)
+            rel_buffer = int(total_height * 0.01)
+            rel_safety_floor = int(total_height * 0.04)
+            snap_threshold = 0.05
 
-        if not found:
-            print("No header structure detected. Using default.")
-            # Default fallback: Top 15%
-            return 0, int(h * 0.15), 20
+        # Final Calculations
+        final_y = max(0, ui_top - rel_shift_up) 
+        
+        # SELECTIVE SNAP TO TOP
+        if final_y < (total_height * snap_threshold):
+             final_y = 0
 
-        # Calculations from "Final Fix"
-        # Shift start up slightly for "elevated" look
-        final_y = max(0, ui_top - 210) 
+        final_h = (ui_bottom - final_y) + rel_buffer
         
-        # Calculate height needed to cover from final_y down to ui_bottom + padding
-        # (ui_bottom - final_y) + buffer
-        final_h = (ui_bottom - final_y) + 120
-        
-        # Safety Floor (for logo space)
-        if final_h < 140: final_h = 140
+        # Safety Floor
+        if final_h < rel_safety_floor: final_h = rel_safety_floor
             
-        # Strict 16% Cap (Ultra-Slim)
-        max_allowed = int(h * 0.16)
+        # Strict Cap
+        max_allowed = int(total_height * (0.10 if not show_headline else 0.16))
         if final_h > max_allowed:
             final_h = max_allowed
             
         content_y = 10 # Tight content padding
         
-        print(f"OpenCV: Detected UI envelope {ui_top}-{ui_bottom}. Banner: y={final_y}, h={final_h} (Cap: {max_allowed})")
+        print(f"OpenCV (Pass 3): Detected UI {ui_top}-{ui_bottom}. Banner: y={final_y}, h={final_h}")
         return final_y, final_h, content_y
 
     except Exception as e:
@@ -181,6 +228,9 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     # Resolve position variables
     if layout_override:
         start_y, block_height, content_padding_top = layout_override
+        # RE-CENTERING LOGIC: If the banner is significantly taller than the content padding might suggest,
+        # we can adjust content_padding_top to center the content.
+        # But for now, we trust the tight padding from the caller.
     else:
         # Manual fallback
         header_percent = config.get('headerHeight', 15)
@@ -210,7 +260,7 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
     handle_color = config.get('handleColor', '#94a3b8')
     
-    headline_fs = int(config.get('headlineFontSize', 32) * scale_factor)
+    headline_fs = int(config.get('headlineFontSize', 24) * scale_factor)
     headline_color = config.get('headlineColor', '#ffffff')
     
     padding = int(width * 0.04)
@@ -219,7 +269,7 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
     
     # Logo
     logo_size = (logo_size_px, logo_size_px)
-    logo_x = padding
+    logo_x = int(padding * 1.25) # Increased left margin for better balance
     # Align content relative to the banner start + internal padding
     content_start_y = start_y + content_padding_top
     
@@ -275,21 +325,24 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir,
         draw.text((name_x, handle_y), handle_text, font=font_reg, fill=handle_color)
 
     # Headline
-    headline_mode = config.get('headlineMode', 'manual')
-    headline_text = config.get('manualHeadline', "") if headline_mode == 'manual' else (reel_data.get('generated_headline') or "AI Headline Pending...")
-    
-    if headline_text:
-        font_head = get_font(headline_fs, bold=False)
-        text_x = padding
-        text_y = logo_y + logo_size_px + int(padding * 0.5)
+    show_headline_raw = config.get('showHeadline', True)
+    show_headline = str(show_headline_raw).lower() == 'true'
+    if show_headline:
+        headline_mode = config.get('headlineMode', 'manual')
+        headline_text = config.get('manualHeadline', "") if headline_mode == 'manual' else (reel_data.get('generated_headline') or "AI Headline Pending...")
         
-        avg_char_width = headline_fs * 0.5
-        max_chars = int((width - (padding * 2)) / avg_char_width)
-        lines = textwrap.wrap(headline_text, width=max_chars)
-        
-        for line in lines:
-            draw.text((text_x, text_y), line, font=font_head, fill=headline_color)
-            text_y += int(headline_fs * 1.3)
+        if headline_text:
+            font_head = get_font(headline_fs, bold=False)
+            text_x = padding
+            text_y = logo_y + logo_size_px + int(padding * 0.5)
+            
+            avg_char_width = headline_fs * 0.5
+            max_chars = int((width - (padding * 2)) / avg_char_width)
+            lines = textwrap.wrap(headline_text, width=max_chars)
+            
+            for line in lines:
+                draw.text((text_x, text_y), line, font=font_head, fill=headline_color)
+                text_y += int(headline_fs * 1.3)
             
     return img
 
@@ -409,7 +462,9 @@ def process_batch(job_id):
                 content_padding = int(width * 0.04)
                 
                 if auto_detect:
-                    detected_y, detected_h, detected_padding = detect_header_height(input_path, height)
+                    show_headline_raw = config.get('showHeadline', True)
+                    show_headline = str(show_headline_raw).lower() == 'true'
+                    detected_y, detected_h, detected_padding = detect_header_height(input_path, height, show_headline=show_headline)
                     
                     # LOGIC: 
                     # 1. We MUST cover the detected original header (detected_h).
@@ -422,22 +477,28 @@ def process_batch(job_id):
                     logo_size_px = int(width * (logo_percent / 100.0))
                     name_fs = int(config.get('nameFontSize', 18) * scale_factor)
                     handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
-                    headline_fs = int(config.get('headlineFontSize', 32) * scale_factor)
+                    headline_fs = int(config.get('headlineFontSize', 24) * scale_factor)
                     padding = int(width * 0.04)
                     
                     # Height needed for Logo + Name row
                     row1_h = max(logo_size_px, int(name_fs * 1.2) + int(handle_fs * 1.2))
                     
                     # Height needed for Headline
-                    headline_text = config.get('manualHeadline', "") # Or AI
+                    show_headline_raw = config.get('showHeadline', True)
+                    show_headline = str(show_headline_raw).lower() == 'true'
                     text_h = 0
-                    if headline_text:
-                         avg_char_width = headline_fs * 0.5
-                         max_chars = int((width - (padding * 2)) / avg_char_width)
-                         lines_count = len(textwrap.wrap(headline_text, width=max_chars))
-                         text_h = lines_count * int(headline_fs * 1.3)
-
-                    design_min_h = row1_h + text_h + (padding * 2.5) # generous internal padding
+                    if show_headline:
+                        # Account for both manual and AI modes in height calculation
+                        headline_mode = config.get('headlineMode', 'manual')
+                        h_text = config.get('manualHeadline', "") if headline_mode == 'manual' else (reel.get('generated_headline') or "AI Headline Pending...")
+                        
+                        if h_text:
+                             avg_char_width = headline_fs * 0.5
+                             max_chars = int((width - (padding * 2)) / avg_char_width)
+                             lines_count = len(textwrap.wrap(h_text, width=max_chars))
+                             text_h = lines_count * int(headline_fs * 1.3)
+                             
+                    design_min_h = row1_h + text_h + (padding * 0.4) # Perfect-fit padding multiplier (increased from 0.2)
 
                     # The Final Height of the Black Bar
                     # Must be at least detected_h (to cover old) and at least design_min_h (to fit new)

@@ -48,9 +48,10 @@ export default function ConfigurePage() {
     const [designBgColor, setDesignBgColor] = useState("#000000")
     const [designOpacity, setDesignOpacity] = useState(100)
 
+    const [showHeadline, setShowHeadline] = useState(false) // Default to no headline
     const [headlineMode, setHeadlineMode] = useState<'manual' | 'ai'>('manual')
     const [manualHeadline, setManualHeadline] = useState("This is an example headline that captures attention.")
-    const [headlineFontSize, setHeadlineFontSize] = useState(32)
+    const [headlineFontSize, setHeadlineFontSize] = useState(24) // Reduced default
     const [headlineColor, setHeadlineColor] = useState("#ffffff")
 
     // Refs
@@ -107,7 +108,6 @@ export default function ConfigurePage() {
             const formData = new FormData()
             formData.append("jobId", params.id as string)
             formData.append("mode", mode)
-            formData.append("mode", mode)
             formData.append("autoDetectPosition", autoDetectPosition.toString())
             formData.append("verticalPosition", verticalPosition.toString())
 
@@ -129,6 +129,7 @@ export default function ConfigurePage() {
                 formData.append("handleColor", handleColor)
                 formData.append("headlineFontSize", headlineFontSize.toString())
                 formData.append("headlineColor", headlineColor)
+                formData.append("showHeadline", showHeadline.toString())
 
                 formData.append("headlineMode", headlineMode)
                 if (headlineMode === 'manual') {
@@ -298,73 +299,110 @@ export default function ConfigurePage() {
                                             <div className="col-span-9 space-y-2">
 
                                                 {/* Background & Opacity */}
-                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center justify-between gap-2 h-[34px]">
-                                                    <span className="text-[9px] text-slate-500 pl-1">BG</span>
-                                                    <div className="flex items-center gap-2 flex-1">
-                                                        <input type="color" value={designBgColor} onChange={(e) => setDesignBgColor(e.target.value)} className="h-4 w-4 rounded-full cursor-pointer border-none" />
-                                                        <div className="flex flex-col flex-1">
-                                                            <input type="range" min="0" max="100" value={designOpacity} onChange={(e) => setDesignOpacity(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-emerald-500" />
+                                                {/* Background & Opacity */}
+                                                <div className="bg-zinc-900/60 border border-white/10 rounded-xl p-3 flex flex-col gap-3 min-h-[70px]">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Background</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <input type="color" value={designBgColor} onChange={(e) => setDesignBgColor(e.target.value)} className="h-6 w-6 rounded-full cursor-pointer border-none bg-transparent" />
+                                                            <span className="text-xs text-white font-mono">{designBgColor}</span>
                                                         </div>
-                                                        <span className="text-[9px] text-slate-400 w-6 text-right">{designOpacity}%</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <input type="range" min="0" max="100" value={designOpacity} onChange={(e) => setDesignOpacity(parseInt(e.target.value))} className="flex-1 h-1.5 bg-zinc-800 rounded-full appearance-none accent-emerald-500" />
+                                                        <span className="text-xs text-slate-400 w-8 text-right font-bold">{designOpacity}%</span>
                                                     </div>
                                                 </div>
 
                                                 {/* Name Row */}
-                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center gap-2 h-[34px]">
-                                                    <input
-                                                        value={designName}
-                                                        onChange={(e) => setDesignName(e.target.value)}
-                                                        className="flex-1 bg-transparent border-b border-white/10 text-[10px] text-white py-0.5 focus:outline-none focus:border-white/40 placeholder:text-slate-600"
-                                                        placeholder="Name"
-                                                    />
-                                                    <div className="w-16">
-                                                        <input type="range" min="10" max="40" value={nameFontSize} onChange={(e) => setNameFontSize(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                {/* Name Row */}
+                                                <div className="bg-zinc-900/60 border border-white/10 rounded-xl p-3 flex flex-col gap-3">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex-1 relative">
+                                                            <input
+                                                                value={designName}
+                                                                onChange={(e) => setDesignName(e.target.value)}
+                                                                className="w-full bg-transparent border-b border-white/10 text-sm text-white py-1.5 focus:outline-none focus:border-emerald-500/50 placeholder:text-slate-600 font-medium"
+                                                                placeholder="Display Name"
+                                                            />
+                                                        </div>
+                                                        <input type="color" value={nameColor} onChange={(e) => setNameColor(e.target.value)} className="h-6 w-6 rounded-lg cursor-pointer border-none bg-transparent" />
                                                     </div>
-                                                    <input type="color" value={nameColor} onChange={(e) => setNameColor(e.target.value)} className="h-4 w-4 rounded cursor-pointer border-none" />
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Size</span>
+                                                        <input type="range" min="10" max="40" value={nameFontSize} onChange={(e) => setNameFontSize(parseInt(e.target.value))} className="flex-1 h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                        <span className="text-xs text-slate-400 w-6 text-right">{nameFontSize}</span>
+                                                    </div>
                                                 </div>
 
                                                 {/* Handle Row */}
-                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center gap-2 h-[34px]">
-                                                    <div className="relative flex-1">
-                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 text-[10px]">@</span>
-                                                        <input
-                                                            value={designHandle}
-                                                            onChange={(e) => setDesignHandle(e.target.value)}
-                                                            className="w-full bg-transparent border-b border-white/10 text-[10px] text-white pl-3 py-0.5 focus:outline-none focus:border-white/40 placeholder:text-slate-600"
-                                                            placeholder="handle"
-                                                        />
+                                                <div className="bg-zinc-900/60 border border-white/10 rounded-xl p-3 flex flex-col gap-3">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex-1 relative">
+                                                            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
+                                                            <input
+                                                                value={designHandle}
+                                                                onChange={(e) => setDesignHandle(e.target.value)}
+                                                                className="w-full bg-transparent border-b border-white/10 text-sm text-white pl-4 py-1.5 focus:outline-none focus:border-emerald-500/50 placeholder:text-slate-600 font-medium"
+                                                                placeholder="handle"
+                                                            />
+                                                        </div>
+                                                        <input type="color" value={handleColor} onChange={(e) => setHandleColor(e.target.value)} className="h-6 w-6 rounded-lg cursor-pointer border-none bg-transparent" />
                                                     </div>
-                                                    <div className="w-16">
-                                                        <input type="range" min="8" max="30" value={handleFontSize} onChange={(e) => setHandleFontSize(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Size</span>
+                                                        <input type="range" min="8" max="30" value={handleFontSize} onChange={(e) => setHandleFontSize(parseInt(e.target.value))} className="flex-1 h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                        <span className="text-xs text-slate-400 w-6 text-right">{handleFontSize}</span>
                                                     </div>
-                                                    <input type="color" value={handleColor} onChange={(e) => setHandleColor(e.target.value)} className="h-4 w-4 rounded cursor-pointer border-none" />
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Headline Section */}
-                                        <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 space-y-1.5">
+                                        <div className="bg-zinc-900/60 border border-white/10 rounded-xl p-4 space-y-4">
                                             <div className="flex items-center justify-between">
-                                                <div className="flex gap-1">
-                                                    <button onClick={() => setHeadlineMode('manual')} className={cn("text-[9px] px-2 py-0.5 rounded transition-colors", headlineMode === 'manual' ? "bg-white text-black font-bold" : "text-slate-500 hover:text-white")}>Manual</button>
-                                                    <button onClick={() => setHeadlineMode('ai')} className={cn("text-[9px] px-2 py-0.5 rounded transition-colors", headlineMode === 'ai' ? "bg-emerald-500 text-black font-bold" : "text-slate-400 hover:text-white")}>AI Auto</button>
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider transition-opacity duration-300">Headline Overlay</span>
+                                                    <p className="text-[10px] text-slate-500">Add a custom headline banner</p>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <input type="range" min="16" max="60" value={headlineFontSize} onChange={(e) => setHeadlineFontSize(parseInt(e.target.value))} className="w-16 h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
-                                                    <input type="color" value={headlineColor} onChange={(e) => setHeadlineColor(e.target.value)} className="h-3 w-3 rounded-full cursor-pointer border-none" />
+                                                <div
+                                                    className={cn("w-10 h-5 rounded-full relative cursor-pointer transition-colors", showHeadline ? "bg-emerald-500" : "bg-zinc-700")}
+                                                    onClick={() => setShowHeadline(!showHeadline)}
+                                                >
+                                                    <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-md", showHeadline ? "left-5.5" : "left-0.5")} style={{ left: showHeadline ? '22px' : '2px' }} />
                                                 </div>
+
                                             </div>
 
-                                            {headlineMode === 'manual' ? (
-                                                <textarea
-                                                    className="w-full h-12 bg-black/20 border border-white/10 rounded p-1.5 text-[10px] text-white focus:outline-none focus:border-white/30 resize-none font-light leading-relaxed"
-                                                    placeholder="Enter headline text..."
-                                                    value={manualHeadline}
-                                                    onChange={(e) => setManualHeadline(e.target.value)}
-                                                />
-                                            ) : (
-                                                <div className="h-12 flex items-center justify-center bg-emerald-500/5 border border-emerald-500/10 rounded text-[10px] text-emerald-500/80">
-                                                    <Wand2 className="w-3 h-3 mr-2" /> AI Generated
+                                            {showHeadline && (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between p-2 bg-black/20 rounded-lg">
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => setHeadlineMode('manual')} className={cn("text-[10px] px-3 py-1 rounded-md transition-all font-bold", headlineMode === 'manual' ? "bg-white text-black shadow-lg" : "text-slate-500 hover:text-white hover:bg-white/5")}>MANUAL</button>
+                                                            <button onClick={() => setHeadlineMode('ai')} className={cn("text-[10px] px-3 py-1 rounded-md transition-all font-bold", headlineMode === 'ai' ? "bg-emerald-500 text-black shadow-lg" : "text-slate-500 hover:text-white hover:bg-emerald-500/10")}>AI AUTO</button>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 pr-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-500 font-bold">FS</span>
+                                                                <input type="range" min="12" max="60" value={headlineFontSize} onChange={(e) => setHeadlineFontSize(parseInt(e.target.value))} className="w-12 h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                            </div>
+                                                            <input type="color" value={headlineColor} onChange={(e) => setHeadlineColor(e.target.value)} className="h-5 w-5 rounded-full cursor-pointer border-none bg-transparent" />
+                                                        </div>
+                                                    </div>
+
+                                                    {headlineMode === 'manual' ? (
+                                                        <textarea
+                                                            className="w-full h-20 bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 resize-none font-medium leading-relaxed transition-all"
+                                                            placeholder="Enter headline text..."
+                                                            value={manualHeadline}
+                                                            onChange={(e) => setManualHeadline(e.target.value)}
+                                                        />
+                                                    ) : (
+                                                        <div className="h-20 flex flex-col items-center justify-center bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 font-semibold gap-2">
+                                                            <Wand2 className="w-5 h-5 animate-pulse" />
+                                                            AI AUTO GENERATION
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -466,7 +504,7 @@ export default function ConfigurePage() {
                                     }}
                                 >
                                     {/* Header Strip */}
-                                    <div className="w-full px-4 py-3 flex items-center gap-3 shrink-0">
+                                    <div className="w-full pl-[22px] pr-4 py-3 flex items-center gap-4 shrink-0">
                                         <div style={{ width: `${logoSize * 2.5}px`, height: `${logoSize * 2.5}px` }}> {/* rough multiplier for preview scale */}
                                             {designLogo ? (
                                                 <img src={designLogo} className="w-full h-full rounded-full border border-white object-cover" />
@@ -501,18 +539,20 @@ export default function ConfigurePage() {
                                     </div>
 
                                     {/* Headline Block */}
-                                    <div className="px-6 pt-2 pb-4">
-                                        <p
-                                            className="font-light leading-snug drop-shadow-md"
-                                            style={{
-                                                fontSize: `${headlineFontSize}px`,
-                                                color: headlineColor,
-                                                lineHeight: '1.2'
-                                            }}
-                                        >
-                                            {headlineMode === 'manual' ? manualHeadline : "AI generated headline will appear here..."}
-                                        </p>
-                                    </div>
+                                    {showHeadline && (
+                                        <div className="px-6 pt-2 pb-4">
+                                            <p
+                                                className="font-light leading-snug drop-shadow-md"
+                                                style={{
+                                                    fontSize: `${headlineFontSize}px`,
+                                                    color: headlineColor,
+                                                    lineHeight: '1.2'
+                                                }}
+                                            >
+                                                {headlineMode === 'manual' ? manualHeadline : "AI generated headline will appear here..."}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

@@ -10,6 +10,9 @@ import { redirect } from "next/navigation"
 const execAsync = promisify(exec)
 const DB_PATH = path.join(process.cwd(), "data", "jobs.json")
 
+// Track active child processes by jobId
+const activeJobs = new Map<string, any>()
+
 // Ensure data directory exists
 async function ensureDb() {
     // DB Directory
@@ -181,7 +184,8 @@ export async function startProcessingJob(formData: FormData) {
 
     const config: any = {
         headerHeight: headerHeight === 'auto' ? 'auto' : parseInt(headerHeight || "15"),
-        mode: mode
+        mode: mode,
+        autoDetectPosition: formData.get("autoDetectPosition") === 'true'
     }
 
     if (mode === 'upload') {
@@ -225,13 +229,16 @@ export async function startProcessingJob(formData: FormData) {
         config.badgeSize = extractInt(formData.get("badgeSize"), 18)
         config.handleFontSize = extractInt(formData.get("handleFontSize"), 14)
         config.handleColor = formData.get("handleColor") as string || "#94a3b8"
-        config.headlineFontSize = extractInt(formData.get("headlineFontSize"), 32)
+        config.headlineFontSize = extractInt(formData.get("headlineFontSize"), 24)
         config.headlineColor = formData.get("headlineColor") as string || "#ffffff"
 
         config.headlineMode = headlineMode
         config.manualHeadline = manualHeadline
+        config.showHeadline = formData.get("showHeadline") === 'true'
         config.verticalPosition = parseInt(formData.get("verticalPosition") as string || "5")
     }
+
+    console.log(`[Job ${jobId}] Generated Context:`, JSON.stringify(config, null, 2))
 
     if (db[jobId]) {
         db[jobId].status = "processing"
@@ -244,13 +251,43 @@ export async function startProcessingJob(formData: FormData) {
     const scriptPath = path.join(process.cwd(), "scripts", "process_batch.py")
     console.log(`Spawning processing script: ${scriptPath} for ${jobId}`)
 
-    exec(`python3 "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
+    const child = exec(`python3 "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
+        activeJobs.delete(jobId) // Remove when finished
         if (error) {
             console.error(`Processing script error for ${jobId}:`, stderr)
         } else {
             console.log(`Processing script success for ${jobId}:`, stdout)
         }
     })
+
+    activeJobs.set(jobId, child)
+
+    return { success: true }
+}
+
+export async function cancelJob(jobId: string) {
+    console.log(`Cancelling job ${jobId}...`)
+
+    // 1. Kill the process if it's running
+    const child = activeJobs.get(jobId)
+    if (child) {
+        // We use SIGTERM. For FFmpeg/Python, we might need a more aggressive 
+        // approach like tree-kill if it doesn't stop, but let's start with this.
+        child.kill('SIGTERM')
+        activeJobs.delete(jobId)
+        console.log(`Process for job ${jobId} killed.`)
+    }
+
+    // 2. Update status in DB
+    await ensureDb()
+    const db = JSON.parse(await fs.readFile(DB_PATH, "utf-8"))
+    if (db[jobId]) {
+        // Only mark as canceled if it wasn't already completed
+        if (db[jobId].status !== 'completed') {
+            db[jobId].status = 'canceled'
+            await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+        }
+    }
 
     return { success: true }
 }

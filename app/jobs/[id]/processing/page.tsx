@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { Loader2, Download, CheckCircle, ArrowLeft, Play } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { getJob, createJobZip } from "@/app/actions"
+import { getJob, createJobZip, cancelJob } from "@/app/actions"
 import { cn } from "@/lib/utils"
 import { SiteHeader } from "@/components/site-header"
 import { ProcessedVideoCard } from "@/components/processed-video-card"
@@ -13,6 +13,8 @@ import { ProcessedVideoCard } from "@/components/processed-video-card"
 export default function ProcessingPage() {
     const params = useParams()
     const router = useRouter()
+    const jobId = params.id as string
+
     const [job, setJob] = useState<any>(null)
     const [processedReels, setProcessedReels] = useState<any[]>([])
     const [pendingReels, setPendingReels] = useState<any[]>([])
@@ -22,10 +24,11 @@ export default function ProcessingPage() {
 
     useEffect(() => {
         let interval: NodeJS.Timeout
+        let isDone = false
 
         async function checkStatus() {
             try {
-                const latestJob = await getJob(params.id as string)
+                const latestJob = await getJob(jobId)
                 if (latestJob) {
                     setJob(latestJob)
                     setStatus(latestJob.status || "processing")
@@ -41,6 +44,7 @@ export default function ProcessingPage() {
                     setProgress(pct)
 
                     if (latestJob.status === "completed") {
+                        isDone = true
                         clearInterval(interval)
                     }
                 }
@@ -49,10 +53,28 @@ export default function ProcessingPage() {
             }
         }
 
+        // Job Cancellation on Close/Navigate
+        const handleCancel = () => {
+            if (!isDone) {
+                cancelJob(jobId)
+            }
+        }
+
+        window.addEventListener('beforeunload', handleCancel)
+
         checkStatus()
         interval = setInterval(checkStatus, 3000) // Poll every 3s
-        return () => clearInterval(interval)
-    }, [params.id])
+
+        return () => {
+            window.removeEventListener('beforeunload', handleCancel)
+            clearInterval(interval)
+
+            // Trigger cancellation on component unmount (React navigation)
+            if (!isDone) {
+                cancelJob(jobId)
+            }
+        }
+    }, [jobId])
 
     const handleDownload = async () => {
         setIsZipping(true)
