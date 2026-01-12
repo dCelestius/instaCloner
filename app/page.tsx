@@ -5,6 +5,7 @@ import { ArrowRight, Instagram, Layers, Zap, Shield, Sparkles, Loader2 } from "l
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
+import { SiteHeader } from "@/components/site-header"
 import { createScrapeJob } from "./actions"
 import { useState, useTransition } from "react"
 import { cn } from "@/lib/utils"
@@ -15,12 +16,13 @@ export default function Home() {
   const [isPending, startTransition] = useTransition()
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <main className="min-h-screen bg-black text-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden pt-24">
+      <SiteHeader step={1} />
 
       {/* Premium Background Elements */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(16,185,129,0.05),transparent_50%)]" />
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-white/5 rounded-full blur-[120px]" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -28,22 +30,10 @@ export default function Home() {
         transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-xl z-10"
       >
-        <div className="flex flex-col items-center space-y-8 text-center mb-12">
-          <div className="relative">
-            <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 animate-pulse" />
-            <div className="relative p-5 bg-black rounded-3xl ring-1 ring-white/20 shadow-2xl">
-              <Instagram className="w-10 h-10 text-emerald-400" />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter leading-none">
-              REELS<span className="text-emerald-500">.</span>CURATOR
-            </h1>
-            <p className="text-slate-400 text-lg md:text-xl font-medium max-w-md mx-auto leading-relaxed">
-              Automated high-performance curation. Identify, scrape, and bake brand designs into top-performing reels.
-            </p>
-          </div>
+        <div className="flex flex-col items-center space-y-4 text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-black tracking-tighter leading-none text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-500">
+            Initialize.
+          </h1>
         </div>
 
         <Card className="border-white/10 bg-black/40 backdrop-blur-2xl shadow-[0_30px_100px_rgba(0,0,0,0.5)] rounded-[2.5rem] overflow-hidden">

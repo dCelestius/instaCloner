@@ -3,10 +3,20 @@ import json
 import os
 import subprocess
 import textwrap
+import traceback
+
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageOps
 except ImportError:
     print("Pillow not installed. Creating without it (will fail for design mode).")
+
+try:
+    import cv2
+    import numpy as np
+    OPENCV_AVAILABLE = True
+except ImportError:
+    OPENCV_AVAILABLE = False
+    print("OpenCV not installed. Auto-detection disabled.")
 
 def get_video_dimensions(input_path):
     """Returns (width, height) of video using ffprobe"""
@@ -26,21 +36,107 @@ def get_video_dimensions(input_path):
         print(f"Error getting dimensions for {input_path}: {e}")
         return None
 
+def detect_header_height(video_path, total_height):
+    """
+    Analyzes video to find the UI header area.
+    Returns (final_y, final_h, content_padding)
+    """
+    if not OPENCV_AVAILABLE:
+        print("OpenCV unavailable, using default safe area")
+        return 0, int(total_height * 0.15), 20
+
+    try:
+        cap = cv2.VideoCapture(video_path)
+        # Read a frame from early in the video (e.g. 1 sec in) to clear transitions
+        cap.set(cv2.CAP_PROP_POS_MSEC, 1000)
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            print("Failed to read video frame for detection")
+            return 0, int(total_height * 0.15), 20
+
+        h, w, _ = frame.shape
+        
+        # Region of Interest: Top 50%
+        roi_h = int(h * 0.50)
+        roi = frame[0:roi_h, 0:w]
+        
+        # Preprocessing
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        # Blur to merge text blocks
+        blurred = cv2.GaussianBlur(gray, (25, 25), 0)
+        edges = cv2.Canny(blurred, 30, 100)
+        
+        # Dilate to connect components
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 5))
+        dilated = cv2.dilate(edges, kernel, iterations=2)
+        
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        ui_top = 0
+        ui_bottom = 0
+        found = False
+        
+        # Look for the lowest significant rectangle in the top area (The Headline)
+        # Ignore very small stuff at very top (status bar)
+        for cnt in contours:
+            x, y, w_rect, h_rect = cv2.boundingRect(cnt)
+            
+            # Filter noise
+            if w_rect < w * 0.2: continue # Too narrow
+            if h_rect < 20: continue # Too short
+            if y < 60: continue # Likely status bar
+            
+            # We want the lowest one found so far in our top scan
+            current_bottom = y + h_rect
+            if current_bottom > ui_bottom:
+                ui_bottom = current_bottom
+                ui_top = y # Track its top too
+                found = True
+
+        if not found:
+            print("No header structure detected. Using default.")
+            # Default fallback: Top 15%
+            return 0, int(h * 0.15), 20
+
+        # Calculations from "Final Fix"
+        # Shift start up slightly for "elevated" look
+        final_y = max(0, ui_top - 210) 
+        
+        # Calculate height needed to cover from final_y down to ui_bottom + padding
+        # (ui_bottom - final_y) + buffer
+        final_h = (ui_bottom - final_y) + 120
+        
+        # Safety Floor (for logo space)
+        if final_h < 140: final_h = 140
+            
+        # Strict 16% Cap (Ultra-Slim)
+        max_allowed = int(h * 0.16)
+        if final_h > max_allowed:
+            final_h = max_allowed
+            
+        content_y = 10 # Tight content padding
+        
+        print(f"OpenCV: Detected UI envelope {ui_top}-{ui_bottom}. Banner: y={final_y}, h={final_h} (Cap: {max_allowed})")
+        return final_y, final_h, content_y
+
+    except Exception as e:
+        print(f"CV Error: {e}")
+        return 0, int(total_height * 0.15), 20
+
 def create_circular_logo(logo_path, size):
     try:
         img = Image.open(logo_path).convert("RGBA")
         img = ImageOps.fit(img, size, centering=(0.5, 0.5))
         
-        # Create mask
         mask = Image.new('L', size, 0)
         draw = ImageDraw.Draw(mask)
         draw.ellipse((0, 0, size[0], size[1]), fill=255)
         
-        # Apply mask
         output = Image.new('RGBA', size, (0, 0, 0, 0))
         output.paste(img, (0, 0), mask)
         
-        # Add white border
         border_thickness = max(2, int(size[0] * 0.05))
         draw_overlay = ImageDraw.Draw(output)
         draw_overlay.ellipse((0, 0, size[0]-1, size[1]-1), outline="white", width=border_thickness)
@@ -51,20 +147,16 @@ def create_circular_logo(logo_path, size):
         return Image.new('RGBA', size, (100, 100, 100, 255))
 
 def get_font(size, bold=False):
-    # Try to load a nice font on Mac
     font_names = [
         "Arial Bold.ttf" if bold else "Arial.ttf",
         "Helvetica-Bold" if bold else "Helvetica",
         "/System/Library/Fonts/Supplemental/Arial.ttf"
     ]
-    
     for name in font_names:
         try:
             return ImageFont.truetype(name, size)
         except:
             continue
-            
-    # Fallback
     try:
         return ImageFont.load_default() 
     except:
@@ -74,135 +166,114 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) + (255,)
 
-def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir):
+def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir, layout_override=None):
     """
-    Generates a transparency overlay with the design elements.
+    Generates the overlay image. 
+    layout_override: (final_y, final_h, content_y) from Auto-Detect
     """
-    # Create full transparent canvas
+    # Create full canvas
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Config
-    vertical_percent = config.get('verticalPosition', 5)
-    bg_color_hex = config.get('designBgColor', '#000000')
-    try:
-        bg_color = hex_to_rgb(bg_color_hex)
-    except:
-        bg_color = (0, 0, 0, 255)
+    # Defaults
+    bg_color = (0, 0, 0, 255) # Solid Black default
+    
+    # Resolve position variables
+    if layout_override:
+        start_y, block_height, content_padding_top = layout_override
+    else:
+        # Manual fallback
+        header_percent = config.get('headerHeight', 15)
+        if header_percent == 'auto': header_percent = 15 # Safety
+        start_y = 0
+        block_height = int(height * (header_percent / 100.0))
+        content_padding_top = int(width * 0.04)
 
-    # Layout Calculations (Config driven)
-    
-    # 1. Base Dimensions relative to video width for scaling consistency if needed, 
-    # but we will try to respect the strict sizes passed if they are meant to be relative to a standard ref?
-    # Actually, standardizing: The React preview assumes standard px sizes on a small screen. 
-    # But video is 1080p. 
-    # We should interpret the input "size" integer as a PERCENTAGE of width or scale appropriately.
-    # However, user slider says "10" to "40". 
-    # Let's treat these as roughly "Scale Factors". 
-    # 12 -> 12% of width is reasonable for Logo.
-    # 18 -> 1.8% of width for text? No, that's too small.
-    # Let's map them: 
-    # Logo: size is % of width (e.g. 12 = 12%)
-    # Font Sizes: size is px on a reference width of say 400px (phone screen).
-    # So for 1080p video, we multiply by (1080/400) = 2.7.
-    
-    scale_factor = width / 380.0 # 380 is approx width of preview panel
-    
-    logo_percent = config.get('logoSize', 12)
-    logo_size_px = int(width * (logo_percent / 100.0))
-    
-    name_fs_base = config.get('nameFontSize', 18)
-    name_fs = int(name_fs_base * scale_factor)
-    name_color = config.get('nameColor', '#ffffff')
-    
-    badge_size_base = config.get('badgeSize', 18)
-    badge_size_px = int(badge_size_base * scale_factor)
-    
-    handle_fs_base = config.get('handleFontSize', 14)
-    handle_fs = int(handle_fs_base * scale_factor)
-    handle_color = config.get('handleColor', '#94a3b8')
-    
-    headline_fs_base = config.get('headlineFontSize', 32)
-    headline_fs = int(headline_fs_base * scale_factor)
-    headline_color = config.get('headlineColor', '#ffffff')
-    
-    # Padding
-    padding = int(width * 0.04) 
-    
-    # Content block y position
-    start_y = int(height * (vertical_percent / 100.0))
-    
-    # Calculate Text Height
-    headline_mode = config.get('headlineMode', 'manual')
-    headline_text = config.get('manualHeadline', "") if headline_mode == 'manual' else (reel_data.get('generated_headline') or "AI Headline Pending...")
-    
-    text_height = 0
-    if headline_text:
-        avg_char_width = headline_fs * 0.5
-        max_chars = int((width - (padding * 2)) / avg_char_width)
-        lines = textwrap.wrap(headline_text, width=max_chars)
-        text_height = len(lines) * int(headline_fs * 1.3) + int(padding * 0.8)
-
-    # Total block height
-    # Logo row height + Headline height + Padding
-    row1_height = max(logo_size_px, int(name_fs * 1.2) + int(handle_fs * 1.2))
-    block_height = row1_height + text_height + (padding * 2) 
-    
-    # Draw Background
+    # Draw Background Banner
     draw.rectangle(
         [(0, start_y), (width, start_y + block_height)], 
         fill=bg_color
     )
     
-    # Draw Content
+    # Scale Factors
+    scale_factor = width / 380.0 
+    
+    # Config Values
+    logo_percent = config.get('logoSize', 12)
+    logo_size_px = int(width * (logo_percent / 100.0))
+    
+    name_fs = int(config.get('nameFontSize', 18) * scale_factor)
+    name_color = config.get('nameColor', '#ffffff')
+    
+    badge_size_px = int(config.get('badgeSize', 18) * scale_factor)
+    
+    handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
+    handle_color = config.get('handleColor', '#94a3b8')
+    
+    headline_fs = int(config.get('headlineFontSize', 32) * scale_factor)
+    headline_color = config.get('headlineColor', '#ffffff')
+    
+    padding = int(width * 0.04)
+    
+    # --- Content Positioning ---
+    
     # Logo
     logo_size = (logo_size_px, logo_size_px)
     logo_x = padding
-    logo_y = start_y + padding
+    # Align content relative to the banner start + internal padding
+    content_start_y = start_y + content_padding_top
     
-    if os.path.join(job_dir, "logo.png") and os.path.exists(os.path.join(job_dir, "logo.png")):
-        logo_img = create_circular_logo(os.path.join(job_dir, "logo.png"), logo_size)
+    logo_y = content_start_y
+    
+    logo_path = os.path.join(job_dir, "logo.png")
+    if os.path.exists(logo_path):
+        logo_img = create_circular_logo(logo_path, logo_size)
         img.paste(logo_img, (logo_x, logo_y), logo_img)
     else:
-         draw.ellipse((logo_x, logo_y, logo_x + logo_size_px, logo_y + logo_size_px), fill=(50, 50, 50), outline="white")
+        # Optional Logo: don't draw it, and maybe shift text left? 
+        # For now, just skip deciding to leave empty space or not.
+        pass
 
     # Name
     name_text = config.get('designName', 'User')
     font_bold = get_font(name_fs, bold=True)
     
-    name_x = logo_x + logo_size_px + int(padding * 0.5)
-    name_y = logo_y # Align top with logo roughly
+    # If no logo, shift left? Let's keep layout simple for now (logo space reserved)
+    name_x = logo_x + logo_size_px + int(padding * 0.5) if os.path.exists(logo_path) else padding
+    name_y = logo_y 
     
     draw.text((name_x, name_y), name_text, font=font_bold, fill=name_color)
     
     # Badge
-    badge_path = os.path.join(base_dir, "Twitter_Verified_Badge_Gold.svg.png")
+    badge_path = os.path.join(base_dir, "public", "Twitter_Verified_Badge_Gold.svg.png")
     if os.path.exists(badge_path):
-        name_bbox = draw.textbbox((name_x, name_y), name_text, font=font_bold)
-        name_w = name_bbox[2] - name_bbox[0]
-        
-        b_size = (badge_size_px, badge_size_px)
         try:
+            name_bbox = draw.textbbox((name_x, name_y), name_text, font=font_bold)
+            name_w = name_bbox[2] - name_bbox[0]
+            
+            b_size = (badge_size_px, badge_size_px)
             badge_img = Image.open(badge_path).convert("RGBA")
             badge_img = ImageOps.fit(badge_img, b_size, centering=(0.5, 0.5))
+            
             badge_x = name_x + name_w + int(padding * 0.2)
-            # Center vertically with text?
             badge_y_pos = name_y + (name_fs // 2) - (badge_size_px // 2)
             img.paste(badge_img, (badge_x, badge_y_pos), badge_img)
         except Exception as e:
+            # print(f"Badge error: {e}")
             pass
 
     # Handle
     handle_text = config.get('designHandle', '')
     if handle_text:
-        if not handle_text.startswith('@'):
-            handle_text = f"@{handle_text}" 
-        
+        if not handle_text.startswith('@'): handle_text = f"@{handle_text}"
         font_reg = get_font(handle_fs, bold=False)
         handle_y = name_y + name_fs + int(padding * 0.1)
         draw.text((name_x, handle_y), handle_text, font=font_reg, fill=handle_color)
 
     # Headline
+    headline_mode = config.get('headlineMode', 'manual')
+    headline_text = config.get('manualHeadline', "") if headline_mode == 'manual' else (reel_data.get('generated_headline') or "AI Headline Pending...")
+    
     if headline_text:
         font_head = get_font(headline_fs, bold=False)
         text_x = padding
@@ -217,41 +288,16 @@ def generate_design_overlay(job_dir, config, width, height, reel_data, base_dir)
             text_y += int(headline_fs * 1.3)
             
     return img
-    
-    if headline_mode == 'manual':
-        headline_text = config.get('manualHeadline', "")
-    else:
-        # AI Mode - Placeholder for now
-        # Check if we have generated title in reel_data?
-        headline_text = reel_data.get('generated_headline') or "AI Headline Generation Pending..."
-        
-    if headline_text:
-        headline_font_size = int(width * 0.05) # 5% of width
-        font_reg = get_font(headline_font_size, bold=False)
-        
-        text_x = padding
-        # Start text below logo + some gap
-        text_y = logo_y + logo_size_px + int(padding * 0.8)
-        
-        # Wrap text
-        # Approx chars per line?
-        avg_char_width = headline_font_size * 0.6
-        max_chars = int((width - (padding * 2)) / avg_char_width)
-        
-        lines = textwrap.wrap(headline_text, width=max_chars)
-        
-        for line in lines:
-            draw.text((text_x, text_y), line, font=font_reg, fill="white")
-            text_y += int(headline_font_size * 1.3)
-            
-    return img
 
 def process_batch(job_id):
-    # Paths
     base_dir = os.getcwd()
     jobs_file = os.path.join(base_dir, "data", "jobs.json")
     job_dir = os.path.join(base_dir, "public", "downloads", job_id)
     
+    # Fallback Source Folder (Mock Data ID)
+    SOURCE_JOB_ID = "0a4c50d9-b8c5-40ff-8ac4-b0449c6d446d"
+    source_dir = os.path.join(base_dir, "public", "downloads", SOURCE_JOB_ID)
+
     if not os.path.exists(jobs_file):
         print("jobs.json not found")
         return
@@ -264,91 +310,178 @@ def process_batch(job_id):
         print(f"Job {job_id} not found")
         return
 
+    # Parse Config
     config = job.get('config', {})
     mode = config.get('mode', 'upload')
-    header_height_percent = config.get('headerHeight', 15)
+    
+    # headerHeight slider was removed. We use Auto-Height or Default.
+    # If config still has it, ignore it or use as safety fallback? 
+    # User requested "dependend on header size", so we use auto-detect logic.
+    
+    # Check for new boolean flag
+    auto_detect_pos_str = str(config.get('autoDetectPosition', 'true')).lower()
+    auto_detect = (auto_detect_pos_str == 'true')
 
-    print(f"Processing Job {job_id} | Mode: {mode} | Height: {header_height_percent}%")
+    print(f"Processing Job {job_id} | Mode: {mode} | AutoDetect: {auto_detect}")
 
     reels = job.get('reels', [])
     processed_count = 0
 
     for reel in reels:
+        # Check Status
         if reel.get('status') != 'approved':
             continue
 
         local_filename = reel.get('local_video_path')
+        
+        # Self-healing: If DB says no file, check if {id}.mp4 exists (legacy/manual fix)
         if not local_filename:
-            print(f"Skipping {reel['id']} - no local file")
+            guessed_filename = f"{reel['id']}.mp4"
+            if os.path.exists(os.path.join(job_dir, guessed_filename)):
+                print(f"Self-healed: Found {guessed_filename} despite missing DB entry")
+                local_filename = guessed_filename
+        
+        if not local_filename:
+            print(f"Skipping {reel['id']} - no local file defined")
             continue
             
+        # Try finding the file
         input_path = os.path.join(job_dir, local_filename)
+        if not os.path.exists(input_path):
+            # FALLBACK to source
+            fallback_path = os.path.join(source_dir, local_filename)
+            if os.path.exists(fallback_path):
+                print(f"Found input in fallback source: {local_filename}")
+                input_path = fallback_path
+            else:
+                print(f"Input file missing: {input_path}")
+                continue
+
+        dims = get_video_dimensions(input_path)
+        if not dims: continue
+        width, height = dims
+        
+        # Prepare Overlay
+        temp_overlay_path = None
+        filter_complex = ""
+        ffmpeg_inputs = []
+        
         output_filename = f"processed_{local_filename}"
         output_path = os.path.join(job_dir, output_filename)
 
-        if not os.path.exists(input_path):
-            print(f"Input file missing: {input_path}")
-            continue
-
-        dims = get_video_dimensions(input_path)
-        if not dims:
-            continue
-            
-        width, height = dims
-        target_h = int(height * (header_height_percent / 100.0))
-        target_w = width
-
-        # Determine overlay image
-        temp_overlay_path = None
-        
         if mode == 'upload':
-            # Use static uploaded image
+            # Check Overlay
             overlay_source = os.path.join(job_dir, "header_overlay.png")
             if not os.path.exists(overlay_source):
-                print("Header overlay missing for upload mode")
+                print("Header overlay missing")
                 continue
                 
-            # Filter complex for static image
+            # Determine Geometry
+            final_y = 0
+            if auto_detect:
+                 # Auto-Height for Upload Mode? Just use detected header height.
+                 detected_y, detected_h, _ = detect_header_height(input_path, height)
+                 final_y = detected_y
+                 target_h = detected_h
+            else:
+                 # Fallback default
+                 target_h = int(height * 0.15)
+            
+            # Simple Crop & Scale of the uploaded image
             filter_complex = (
-                f"[1:v]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-                f"crop={target_w}:{target_h}[header];"
-                f"[0:v][header]overlay=0:0"
+                f"[1:v]scale={width}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{target_h}[header];"
+                f"[0:v][header]overlay=0:{final_y}:shortest=1"
             )
             ffmpeg_inputs = ['-i', overlay_source]
-            
-        else: # Design Mode
+
+        else: # DESIGN Mode
             try:
-                # Generate unique overlay for this video resolution
-                overlay_img = generate_design_overlay(job_dir, config, width, target_h, reel, base_dir)
+                layout_override = None
+                
+                # Default / Fallback (if Auto is OFF)
+                final_y = 0
+                target_h = int(height * 0.15) # Default 15%
+                content_padding = int(width * 0.04)
+                
+                if auto_detect:
+                    detected_y, detected_h, detected_padding = detect_header_height(input_path, height)
+                    
+                    # LOGIC: 
+                    # 1. We MUST cover the detected original header (detected_h).
+                    # 2. We MUST fit our new design content.
+                    
+                    # Calculate Design Content Height requirements
+                    # (This is rough duplication of logic inside generate_design_overlay, but safest way)
+                    scale_factor = width / 380.0
+                    logo_percent = config.get('logoSize', 12)
+                    logo_size_px = int(width * (logo_percent / 100.0))
+                    name_fs = int(config.get('nameFontSize', 18) * scale_factor)
+                    handle_fs = int(config.get('handleFontSize', 14) * scale_factor)
+                    headline_fs = int(config.get('headlineFontSize', 32) * scale_factor)
+                    padding = int(width * 0.04)
+                    
+                    # Height needed for Logo + Name row
+                    row1_h = max(logo_size_px, int(name_fs * 1.2) + int(handle_fs * 1.2))
+                    
+                    # Height needed for Headline
+                    headline_text = config.get('manualHeadline', "") # Or AI
+                    text_h = 0
+                    if headline_text:
+                         avg_char_width = headline_fs * 0.5
+                         max_chars = int((width - (padding * 2)) / avg_char_width)
+                         lines_count = len(textwrap.wrap(headline_text, width=max_chars))
+                         text_h = lines_count * int(headline_fs * 1.3)
+
+                    design_min_h = row1_h + text_h + (padding * 2.5) # generous internal padding
+
+                    # The Final Height of the Black Bar
+                    # Must be at least detected_h (to cover old) and at least design_min_h (to fit new)
+                    final_h = max(detected_h, design_min_h)
+                    
+                    # Cap at 35% to be safe? Or trust the inputs?
+                    # User asked for "Dependent on header size", so trust max.
+                    
+                    print(f"Auto-Height: Detected Old={detected_h}px, Needed New={int(design_min_h)}px -> Final={int(final_h)}px")
+
+                    final_y = detected_y
+                    target_h = int(final_h)
+                    content_padding = detected_padding # Use the tight padding from detector
+
+                
+                layout_override = (final_y, target_h, content_padding)
+                    
+                overlay_img = generate_design_overlay(job_dir, config, width, height, reel, base_dir, layout_override=layout_override)
+                
                 temp_overlay_path = os.path.join(job_dir, f"temp_overlay_{reel['id']}.png")
                 overlay_img.save(temp_overlay_path)
                 
-                # For design mode, the generated image is EXACTLY target_w x target_h
-                # So no scaling needed, just overlay
-                filter_complex = f"[0:v][1:v]overlay=0:0"
+                # Overlay is full frame? No, generate_design_overlay creates full frame image
+                # So we just overlay at 0:0
+                filter_complex = "[0:v][1:v]overlay=0:0:shortest=1"
                 ffmpeg_inputs = ['-i', temp_overlay_path]
                 
             except Exception as e:
-                print(f"Failed to generate design overlay: {e}")
+                print(f"Design Generation Error: {e}")
+                traceback.print_exc()
                 continue
-
-        print(f"Processing {local_filename} -> Overlay {target_w}x{target_h}")
-
+        
+        print(f"Baking {local_filename}...")
+        
         cmd = [
-            'ffmpeg',
-            '-y', 
+            'ffmpeg', '-y', 
             '-i', input_path,
             *ffmpeg_inputs,
             '-filter_complex', filter_complex,
-            '-c:a', 'copy', 
-            output_path
+            '-c:a', 'copy',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+             output_path
         ]
-
+        
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             print(f"Saved {output_filename}")
             
-            # Clean up temp overlay
             if temp_overlay_path and os.path.exists(temp_overlay_path):
                 os.remove(temp_overlay_path)
 
@@ -356,11 +489,11 @@ def process_batch(job_id):
             processed_count += 1
             
         except subprocess.CalledProcessError as e:
-            print(f"FFmpeg failed for {local_filename}: {e.stderr.decode()}")
+            print(f"FFmpeg failed: {e.stderr.decode()}")
 
-    # Update Job Status
+    # Update Job
+    # Clear out old processed status? No, we just add to it.
     job['status'] = 'completed'
-    
     with open(jobs_file, 'w') as f:
         json.dump(db, f, indent=2)
 

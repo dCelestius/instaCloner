@@ -59,8 +59,10 @@ export async function createScrapeJob(formData: FormData) {
 
     const jobId = randomUUID()
 
+    const reelsCount = extractInt(formData.get("reelsCount"), 12)
+
     try {
-        console.log(`Starting scrape for ${url}...`)
+        console.log(`Starting scrape for ${url} (Limit: ${reelsCount})...`)
         const scriptPath = path.join(process.cwd(), "scripts", "scrape_profile.py")
 
         // Ensure job directory exists
@@ -68,9 +70,9 @@ export async function createScrapeJob(formData: FormData) {
         const jobDirAbs = path.join(process.cwd(), "public", "downloads", jobDirName)
         await fs.mkdir(jobDirAbs, { recursive: true })
 
-        // Execute python script with output dir
-        console.log(`Running python script: ${scriptPath} for ${url} -> ${jobDirAbs}`)
-        const { stdout } = await execAsync(`python3 "${scriptPath}" "${url}" "${jobDirAbs}"`)
+        // Execute python script with output dir AND max_count
+        console.log(`Running python script: ${scriptPath} for ${url} -> ${jobDirAbs} (Max: ${reelsCount})`)
+        const { stdout } = await execAsync(`python3 "${scriptPath}" "${url}" "${jobDirAbs}" "${reelsCount}"`)
 
         // Parse result
         let mappedReels = []
@@ -101,13 +103,13 @@ export async function createScrapeJob(formData: FormData) {
             status: "approved" as const,
             // Construct the public URL: /downloads/{jobId}/{filename}
             url: r.local_video_path
-                ? `/downloads/${jobDirName}/${r.local_video_path}`
+                ? `/downloads/${jobDirName}/${path.basename(r.local_video_path)}`
                 : r.url,
             thumbnail: r.local_thumb_path
-                ? `/downloads/${jobDirName}/${r.local_thumb_path}`
+                ? `/downloads/${jobDirName}/${path.basename(r.local_thumb_path)}`
                 : r.thumbnail,
             playable_url: r.local_video_path
-                ? `/downloads/${jobDirName}/${r.local_video_path}`
+                ? `/downloads/${jobDirName}/${path.basename(r.local_video_path)}`
                 : r.playable_url
         }))
 
@@ -178,7 +180,7 @@ export async function startProcessingJob(formData: FormData) {
     const db = JSON.parse(await fs.readFile(DB_PATH, "utf-8"))
 
     const config: any = {
-        headerHeight: parseInt(headerHeight),
+        headerHeight: headerHeight === 'auto' ? 'auto' : parseInt(headerHeight || "15"),
         mode: mode
     }
 
@@ -250,7 +252,7 @@ export async function startProcessingJob(formData: FormData) {
         }
     })
 
-    redirect(`/jobs/${jobId}/processing`)
+    return { success: true }
 }
 
 export async function createJobZip(jobId: string) {

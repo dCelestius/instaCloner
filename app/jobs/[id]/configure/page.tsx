@@ -1,13 +1,13 @@
-
 "use client"
 
 import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Upload, Check, ChevronRight, Wand2, Type, ImageIcon, LayoutTemplate } from "lucide-react"
+import { Wand2, Image as ImageIcon, Check, ChevronRight, Upload, X, RotateCcw, LayoutTemplate } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { SiteHeader } from "@/components/site-header"
 import { cn } from "@/lib/utils"
 // Server action
 import { getJob, startProcessingJob } from "@/app/actions"
@@ -17,11 +17,11 @@ export default function ConfigurePage() {
     const router = useRouter()
 
     // Mode: 'upload' or 'design'
-    const [mode, setMode] = useState<'upload' | 'design'>('upload')
+    const [mode, setMode] = useState<'upload' | 'design'>('design')
 
     // Common
-    const [headerHeight, setHeaderHeight] = useState(15) // percentage (Upload mode only)
-    const [verticalPosition, setVerticalPosition] = useState(5) // percentage (Design mode only)
+    const [autoDetectPosition, setAutoDetectPosition] = useState(true) // Toggle for Auto-Detect
+    const [verticalPosition, setVerticalPosition] = useState(5) // Legacy/Manual fallback
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [sampleVideoUrl, setSampleVideoUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
@@ -46,7 +46,7 @@ export default function ConfigurePage() {
     const [handleColor, setHandleColor] = useState("#94a3b8") // slate-400
 
     const [designBgColor, setDesignBgColor] = useState("#000000")
-    const [designOpacity, setDesignOpacity] = useState(80)
+    const [designOpacity, setDesignOpacity] = useState(100)
 
     const [headlineMode, setHeadlineMode] = useState<'manual' | 'ai'>('manual')
     const [manualHeadline, setManualHeadline] = useState("This is an example headline that captures attention.")
@@ -100,14 +100,15 @@ export default function ConfigurePage() {
 
     const handleStartProcessing = async () => {
         if (mode === 'upload' && !headerFile) return
-        if (mode === 'design' && !designLogoFile) return // Logo required? Maybe optional? Assuming required.
+        // if (mode === 'design' && !designLogoFile) return // Logo optional now
 
         setIsSubmitting(true)
         try {
             const formData = new FormData()
             formData.append("jobId", params.id as string)
             formData.append("mode", mode)
-            formData.append("headerHeight", headerHeight.toString())
+            formData.append("mode", mode)
+            formData.append("autoDetectPosition", autoDetectPosition.toString())
             formData.append("verticalPosition", verticalPosition.toString())
 
             if (mode === 'upload' && headerFile) {
@@ -136,6 +137,7 @@ export default function ConfigurePage() {
             }
 
             await startProcessingJob(formData)
+            router.push(`/jobs/${params.id}/processing`)
         } catch (e) {
             console.error(e)
             alert("Failed to start processing")
@@ -185,37 +187,22 @@ export default function ConfigurePage() {
         )
     }
 
-    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Loading...</div>
+    if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-400 animate-pulse tracking-widest uppercase text-xs font-bold">Loading Configuration...</div>
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
-            {/* Header */}
-            <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-slate-950/80 backdrop-blur">
-                <div className="flex h-16 items-center px-4 md:px-8 justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-slate-400 hover:text-white">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                        <h2 className="text-lg font-semibold tracking-tight">Configure Processing</h2>
-                    </div>
-                </div>
-            </header>
 
-            <main className="flex-1 container max-w-6xl mx-auto py-8 px-4 flex flex-col lg:flex-row gap-8">
+        <div className="min-h-screen bg-black text-slate-50 flex flex-col pt-24 pb-8">
+            <SiteHeader
+                step={3}
+                backUrl={`/jobs/${params.id}`}
+            />
+
+            {/* Main Layout - Centered Container */}
+            <main className="container max-w-7xl mx-auto px-6 h-full flex flex-col lg:flex-row gap-8">
 
                 {/* Configuration Panel */}
                 <div className="flex-1 space-y-6">
-                    <div className="flex bg-slate-900 p-1 rounded-lg border border-white/10 w-fit">
-                        <button
-                            onClick={() => setMode('upload')}
-                            className={cn(
-                                "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
-                                mode === 'upload' ? "bg-slate-800 text-white shadow-sm" : "text-slate-400 hover:text-white"
-                            )}
-                        >
-                            <Upload className="w-4 h-4" />
-                            Upload Overlay
-                        </button>
+                    <div className="flex bg-zinc-900 p-1 rounded-lg border border-white/10 w-fit">
                         <button
                             onClick={() => setMode('design')}
                             className={cn(
@@ -226,9 +213,19 @@ export default function ConfigurePage() {
                             <LayoutTemplate className="w-4 h-4" />
                             Create Design
                         </button>
+                        <button
+                            onClick={() => setMode('upload')}
+                            className={cn(
+                                "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                                mode === 'upload' ? "bg-slate-800 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                            )}
+                        >
+                            <Upload className="w-4 h-4" />
+                            Upload Overlay
+                        </button>
                     </div>
 
-                    <Card className="bg-slate-900 border-white/10">
+                    <Card className="bg-zinc-900/50 border-white/10">
                         <CardContent className="p-6 space-y-8">
 
                             {mode === 'upload' ? (
@@ -269,136 +266,105 @@ export default function ConfigurePage() {
                                 <div className="space-y-6">
                                     {/* Design Mode Inputs */}
                                     {/* Design Mode Inputs - Compact & Precise */}
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-sm font-medium text-white uppercase tracking-wider">Header Design</h3>
-                                            <span className="text-[10px] text-slate-500">Precise Controls</span>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <h3 className="text-xs font-semibold text-white uppercase tracking-wider">Design</h3>
+                                            <span className="text-[9px] text-slate-500">Auto-Detect Enabled</span>
                                         </div>
 
-                                        {/* Row 1: Logo & Background */}
-                                        <div className="grid grid-cols-12 gap-3">
-                                            {/* Logo Section */}
-                                            <div className="col-span-4 bg-black/20 border border-white/10 rounded-md p-2 flex flex-col gap-2">
+                                        {/* Compact Grid: Logo (left) + Settings (right) */}
+                                        <div className="grid grid-cols-12 gap-2">
+                                            {/* Logo Column */}
+                                            <div className="col-span-3 bg-zinc-900/50 border border-white/10 rounded p-1.5 flex flex-col justify-between">
                                                 <div
-                                                    className="aspect-square rounded-md border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/5 bg-black/40 relative overflow-hidden"
+                                                    className="aspect-square rounded-full border border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/5 bg-black/40 relative overflow-hidden"
                                                     onClick={() => logoInputRef.current?.click()}
                                                 >
                                                     {designLogo ? (
                                                         <img src={designLogo} className="w-full h-full object-cover" />
                                                     ) : (
                                                         <div className="text-center">
-                                                            <Upload className="w-4 h-4 mx-auto text-slate-500" />
-                                                            <span className="text-[8px] text-slate-500 block mt-1">LOGO</span>
+                                                            <Upload className="w-3 h-3 mx-auto text-slate-500" />
+                                                            <span className="text-[7px] text-slate-500 block mt-0.5">LOGO</span>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between text-[8px] text-slate-400">
-                                                        <span>Size</span>
-                                                        <span>{logoSize}</span>
-                                                    </div>
-                                                    <input type="range" min="5" max="30" value={logoSize} onChange={(e) => setLogoSize(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-white" />
+                                                <div className="mt-1">
+                                                    <input type="range" min="5" max="30" value={logoSize} onChange={(e) => setLogoSize(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
                                                 </div>
                                             </div>
 
-                                            {/* Background & Opacity */}
-                                            <div className="col-span-8 bg-black/20 border border-white/10 rounded-md p-2 flex flex-col gap-2">
-                                                <label className="text-[10px] text-slate-400 font-medium">Background</label>
-                                                <div className="flex gap-2">
-                                                    <input type="color" value={designBgColor} onChange={(e) => setDesignBgColor(e.target.value)} className="h-6 w-6 p-0 rounded cursor-pointer border-none" />
-                                                    <input
-                                                        type="text"
-                                                        value={designBgColor}
-                                                        onChange={(e) => setDesignBgColor(e.target.value)}
-                                                        className="flex-1 bg-transparent border-b border-white/10 text-xs text-white font-mono h-6 focus:outline-none focus:border-emerald-500"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1 mt-1">
-                                                    <div className="flex justify-between text-[8px] text-slate-400">
-                                                        <span>Opacity</span>
-                                                        <span>{designOpacity}%</span>
-                                                    </div>
-                                                    <input type="range" min="0" max="100" value={designOpacity} onChange={(e) => setDesignOpacity(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-emerald-500" />
-                                                </div>
-                                            </div>
-                                        </div>
+                                            {/* Right Column: Background, Name, Handle */}
+                                            <div className="col-span-9 space-y-2">
 
-                                        {/* Row 2: Name & Badge */}
-                                        <div className="bg-black/20 border border-white/10 rounded-md p-2 space-y-3">
-                                            {/* Name Control */}
-                                            <div className="grid grid-cols-12 gap-2 items-center">
-                                                <div className="col-span-5">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Name</label>
+                                                {/* Background & Opacity */}
+                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center justify-between gap-2 h-[34px]">
+                                                    <span className="text-[9px] text-slate-500 pl-1">BG</span>
+                                                    <div className="flex items-center gap-2 flex-1">
+                                                        <input type="color" value={designBgColor} onChange={(e) => setDesignBgColor(e.target.value)} className="h-4 w-4 rounded-full cursor-pointer border-none" />
+                                                        <div className="flex flex-col flex-1">
+                                                            <input type="range" min="0" max="100" value={designOpacity} onChange={(e) => setDesignOpacity(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-emerald-500" />
+                                                        </div>
+                                                        <span className="text-[9px] text-slate-400 w-6 text-right">{designOpacity}%</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Name Row */}
+                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center gap-2 h-[34px]">
                                                     <input
                                                         value={designName}
                                                         onChange={(e) => setDesignName(e.target.value)}
-                                                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-white/30"
+                                                        className="flex-1 bg-transparent border-b border-white/10 text-[10px] text-white py-0.5 focus:outline-none focus:border-white/40 placeholder:text-slate-600"
+                                                        placeholder="Name"
                                                     />
+                                                    <div className="w-16">
+                                                        <input type="range" min="10" max="40" value={nameFontSize} onChange={(e) => setNameFontSize(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                    </div>
+                                                    <input type="color" value={nameColor} onChange={(e) => setNameColor(e.target.value)} className="h-4 w-4 rounded cursor-pointer border-none" />
                                                 </div>
-                                                <div className="col-span-3">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Size ({nameFontSize})</label>
-                                                    <input type="range" min="10" max="40" value={nameFontSize} onChange={(e) => setNameFontSize(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-white" />
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Color</label>
-                                                    <input type="color" value={nameColor} onChange={(e) => setNameColor(e.target.value)} className="h-5 w-5 p-0 rounded cursor-pointer border-none" />
-                                                </div>
-                                                <div className="col-span-3 border-l border-white/10 pl-2">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Badge Size</label>
-                                                    <input type="range" min="10" max="40" value={badgeSize} onChange={(e) => setBadgeSize(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-yellow-500" />
-                                                </div>
-                                            </div>
 
-                                            {/* Handle Control */}
-                                            <div className="grid grid-cols-12 gap-2 items-center">
-                                                <div className="col-span-5">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Handle</label>
-                                                    <div className="relative">
-                                                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-500 text-[10px]">@</span>
+                                                {/* Handle Row */}
+                                                <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 flex items-center gap-2 h-[34px]">
+                                                    <div className="relative flex-1">
+                                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-500 text-[10px]">@</span>
                                                         <input
                                                             value={designHandle}
                                                             onChange={(e) => setDesignHandle(e.target.value)}
-                                                            className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 pl-4 text-xs text-white focus:outline-none focus:border-white/30"
+                                                            className="w-full bg-transparent border-b border-white/10 text-[10px] text-white pl-3 py-0.5 focus:outline-none focus:border-white/40 placeholder:text-slate-600"
+                                                            placeholder="handle"
                                                         />
                                                     </div>
-                                                </div>
-                                                <div className="col-span-3">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Size ({handleFontSize})</label>
-                                                    <input type="range" min="8" max="30" value={handleFontSize} onChange={(e) => setHandleFontSize(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-white" />
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <label className="text-[10px] text-slate-500 block mb-1">Color</label>
-                                                    <input type="color" value={handleColor} onChange={(e) => setHandleColor(e.target.value)} className="h-5 w-5 p-0 rounded cursor-pointer border-none" />
+                                                    <div className="w-16">
+                                                        <input type="range" min="8" max="30" value={handleFontSize} onChange={(e) => setHandleFontSize(parseInt(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                    </div>
+                                                    <input type="color" value={handleColor} onChange={(e) => setHandleColor(e.target.value)} className="h-4 w-4 rounded cursor-pointer border-none" />
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Row 3: Headline */}
-                                        <div className="bg-black/20 border border-white/10 rounded-md p-2 space-y-2">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => setHeadlineMode('manual')} className={cn("text-[10px] px-2 py-0.5 rounded transition-colors", headlineMode === 'manual' ? "bg-white text-black font-bold" : "text-slate-500 hover:text-white")}>Manual</button>
-                                                    <button onClick={() => setHeadlineMode('ai')} className={cn("text-[10px] px-2 py-0.5 rounded transition-colors", headlineMode === 'ai' ? "bg-indigo-500 text-white font-bold" : "text-indigo-400 hover:text-indigo-300")}>AI Auto</button>
+                                        {/* Headline Section */}
+                                        <div className="bg-zinc-900/50 border border-white/10 rounded p-1.5 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => setHeadlineMode('manual')} className={cn("text-[9px] px-2 py-0.5 rounded transition-colors", headlineMode === 'manual' ? "bg-white text-black font-bold" : "text-slate-500 hover:text-white")}>Manual</button>
+                                                    <button onClick={() => setHeadlineMode('ai')} className={cn("text-[9px] px-2 py-0.5 rounded transition-colors", headlineMode === 'ai' ? "bg-emerald-500 text-black font-bold" : "text-slate-400 hover:text-white")}>AI Auto</button>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <input type="color" value={headlineColor} onChange={(e) => setHeadlineColor(e.target.value)} className="h-4 w-4 p-0 rounded cursor-pointer border-none" />
-                                                    <div className="w-16">
-                                                        <input type="range" min="16" max="60" value={headlineFontSize} onChange={(e) => setHeadlineFontSize(parseInt(e.target.value))} className="w-full h-1 bg-slate-800 rounded-full appearance-none accent-white" />
-                                                    </div>
-                                                    <span className="text-[9px] text-slate-500 w-4">{headlineFontSize}</span>
+                                                    <input type="range" min="16" max="60" value={headlineFontSize} onChange={(e) => setHeadlineFontSize(parseInt(e.target.value))} className="w-16 h-1 bg-zinc-800 rounded-full appearance-none accent-white" />
+                                                    <input type="color" value={headlineColor} onChange={(e) => setHeadlineColor(e.target.value)} className="h-3 w-3 rounded-full cursor-pointer border-none" />
                                                 </div>
                                             </div>
 
                                             {headlineMode === 'manual' ? (
                                                 <textarea
-                                                    className="w-full h-16 bg-white/5 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-white/30 resize-none font-light"
-                                                    placeholder="Headline text..."
+                                                    className="w-full h-12 bg-black/20 border border-white/10 rounded p-1.5 text-[10px] text-white focus:outline-none focus:border-white/30 resize-none font-light leading-relaxed"
+                                                    placeholder="Enter headline text..."
                                                     value={manualHeadline}
                                                     onChange={(e) => setManualHeadline(e.target.value)}
                                                 />
                                             ) : (
-                                                <div className="h-16 flex items-center justify-center bg-indigo-500/10 border border-indigo-500/20 rounded text-xs text-indigo-300">
-                                                    <Wand2 className="w-3 h-3 mr-2" /> AI Generated based on content
+                                                <div className="h-12 flex items-center justify-center bg-emerald-500/5 border border-emerald-500/10 rounded text-[10px] text-emerald-500/80">
+                                                    <Wand2 className="w-3 h-3 mr-2" /> AI Generated
                                                 </div>
                                             )}
                                         </div>
@@ -416,35 +382,25 @@ export default function ConfigurePage() {
                             )}
 
                             {/* Common Height/Position Slider */}
-                            <div className="pt-4 border-t border-white/10">
-                                <h3 className="text-sm font-medium text-slate-300 mb-3">
-                                    {mode === 'upload' ? "Overlay Height (Crop)" : "Vertical Position"}
-                                </h3>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between text-xs text-slate-500">
-                                        <span>{mode === 'upload' ? "Top Coverage" : "Distance from Top"}</span>
-                                        <span>{mode === 'upload' ? headerHeight : verticalPosition}%</span>
-                                    </div>
+                            <div className="pt-2 border-t border-white/10 mt-2">
+                                <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2">Layout</h3>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between bg-zinc-900/50 p-2 rounded border border-white/5">
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5">
+                                                <Wand2 className="w-3 h-3 text-emerald-500" />
+                                                Auto-Detect Header
+                                            </label>
+                                            <p className="text-[9px] text-slate-500 leading-tight">Smart positioning & sizing.</p>
+                                        </div>
 
-                                    {mode === 'upload' ? (
-                                        <input
-                                            type="range"
-                                            min="5"
-                                            max="50"
-                                            value={headerHeight}
-                                            onChange={(e) => setHeaderHeight(parseInt(e.target.value))}
-                                            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                        />
-                                    ) : (
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="80"
-                                            value={verticalPosition}
-                                            onChange={(e) => setVerticalPosition(parseInt(e.target.value))}
-                                            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                        />
-                                    )}
+                                        <div
+                                            className={cn("w-8 h-4 rounded-full relative cursor-pointer transition-colors", autoDetectPosition ? "bg-emerald-500" : "bg-zinc-700")}
+                                            onClick={() => setAutoDetectPosition(!autoDetectPosition)}
+                                        >
+                                            <div className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all shadow-sm", autoDetectPosition ? "left-4.5" : "left-0.5")} style={{ left: autoDetectPosition ? '18px' : '2px' }} />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -452,7 +408,7 @@ export default function ConfigurePage() {
                                 <Button
                                     size="lg"
                                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-semibold"
-                                    disabled={loading || isSubmitting || (mode === 'upload' && !headerFile) || (mode === 'design' && !designLogoFile)}
+                                    disabled={loading || isSubmitting || (mode === 'upload' && !headerFile)}
                                     onClick={handleStartProcessing}
                                 >
                                     {isSubmitting ? "Starting Job..." : "Start Processing Batch"}
@@ -493,7 +449,7 @@ export default function ConfigurePage() {
                                 <div
                                     className="absolute top-0 left-0 w-full z-10 bg-no-repeat bg-cover bg-center transition-all duration-75 border-b border-emerald-500/30"
                                     style={{
-                                        height: `${headerHeight}%`,
+                                        height: `15%`,
                                         backgroundImage: `url(${headerImage})`,
                                         backgroundColor: 'black'
                                     }}
@@ -502,9 +458,10 @@ export default function ConfigurePage() {
 
                             {mode === 'design' && (
                                 <div
-                                    className="absolute w-full z-10 flex flex-col pointer-events-none transition-all duration-75 box-content"
+                                    className="absolute w-full z-10 flex flex-col pointer-events-none transition-all duration-75 box-content left-0"
                                     style={{
-                                        top: `${verticalPosition}%`,
+                                        top: 0,
+                                        height: 'auto',
                                         backgroundColor: getRgbaColor(designBgColor, designOpacity)
                                     }}
                                 >

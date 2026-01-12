@@ -3,6 +3,7 @@ import json
 import os
 import instaloader
 from datetime import datetime
+import contextlib
 
 class StdoutRedirect:
     def __enter__(self):
@@ -21,6 +22,10 @@ def default_serializer(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 def scrape_profile(username, output_dir, max_count=12):
+    """
+    Scrapes the last N reels from a public profile using Instaloader.
+    Downloads thumbnails and video files.
+    """
     # Quiet mode to prevent stdout pollution
     L = instaloader.Instaloader(
         download_pictures=True,
@@ -60,33 +65,50 @@ def scrape_profile(username, output_dir, max_count=12):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Use iterator
-    posts = profile.get_posts()
+    # Change to output directory to avoid path issues
+    start_dir = os.getcwd()
+    os.chdir(output_dir)
 
+    # Use shortcode as filename pattern for deterministic matching
+    L.filename_pattern = "{shortcode}"
+    # Force current directory (dot) to avoid subdirectory creation or empty path errors
+    L.dirname_pattern = "."
+
+    # Use iterator - profile already loaded above
+    posts = profile.get_posts()
+    
+    # Iterate posts
     for post in posts:
+        if count >= max_count:
+            break
+            
         if post.is_video:
             try:
-                # Redirect stdout during download to ensure clean JSON output
-                # because Instaloader prints even in quiet mode sometimes?
-                # or extensions/plugins might.
-                with StdoutRedirect():
-                    L.download_post(post, target=output_dir)
+                # Redirect stdout to suppress Instaloader logs
+                with open(os.devnull, 'w') as fnull:
+                    with contextlib.redirect_stdout(fnull):
+                        # Passing target='.' ensures dirname_pattern '.' is used/validated
+                        L.download_post(post, target='.')
                 
-                # Check for the files. Instaloader uses {date}_UTC.mp4 and {date}_UTC.jpg
-                basename = post.date_utc.strftime('%Y-%m-%d_%H-%M-%S_UTC')
+                # Deterministic filename based on shortcode
+                basename = post.shortcode
                 video_filename = f"{basename}.mp4"
                 thumb_filename = f"{basename}.jpg"
                 
-                # Verify file exists
-                local_video_exists = os.path.exists(os.path.join(output_dir, video_filename))
-                local_thumb_exists = os.path.exists(os.path.join(output_dir, thumb_filename))
+                # Verify file exists (relative check in CWD)
+                local_video_exists = os.path.exists(video_filename)
+                
+                # Debug Check
+                if not local_video_exists:
+                     sys.stderr.write(f"checking {video_filename} in {os.getcwd()}\n")
+                     sys.stderr.write(f"files: {os.listdir('.')}\n")
+
+                local_thumb_exists = os.path.exists(thumb_filename)
                 
                 # Construct data
                 reels_data.append({
                     "id": post.shortcode,
                     "filename_base": basename, 
-                    # If local file exists, send just the filename for backend to prefix
-                    # If not, send null/original URL (fallback)
                     "url": post.video_url, 
                     "local_video_path": video_filename if local_video_exists else None,
                     "local_thumb_path": thumb_filename if local_thumb_exists else None,
@@ -102,10 +124,7 @@ def scrape_profile(username, output_dir, max_count=12):
                 })
                 
                 count += 1
-                if count >= max_count:
-                    break
             except Exception as e:
-                # Log to stderr
                 sys.stderr.write(f"Error processing post {post.shortcode}: {e}\n")
                 continue
     
@@ -125,4 +144,12 @@ if __name__ == "__main__":
         # handle trailing slash or query params
         username = username.split("instagram.com/")[1].split("/")[0].split("?")[0]
         
-    scrape_profile(username, output_dir)
+    # Parse optional max_count
+    max_count = 12
+    if len(sys.argv) > 3:
+        try:
+            max_count = int(sys.argv[3])
+        except:
+            max_count = 12
+
+    scrape_profile(username, output_dir, max_count)
