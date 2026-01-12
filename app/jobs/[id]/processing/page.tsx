@@ -121,11 +121,16 @@ export default function ProcessingPage() {
                                     damping: 30,
                                     mass: 0.8
                                 }}
+                                className="flex flex-col gap-2"
                             >
                                 <ProcessedVideoCard
                                     reel={reel}
                                     jobId={params.id as string}
                                 />
+                                <div className="px-1 flex justify-between items-center opacity-60">
+                                    <p className="text-[10px] font-mono text-zinc-500 truncate">REF: {reel.id}</p>
+                                    <p className="text-[10px] font-medium text-emerald-500/80">@{reel.username}</p>
+                                </div>
                             </motion.div>
                         ))}
                     </AnimatePresence>

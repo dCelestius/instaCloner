@@ -21,12 +21,14 @@ interface ProcessedVideoCardProps {
 
 export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCardProps) {
     const videoRef = useRef<HTMLVideoElement>(null)
-    const videoSrc = `/downloads/${jobId}/${reel.processed_path || reel.local_video_path}`
+    const baseVideoSrc = `/downloads/${jobId}/${reel.processed_path || reel.local_video_path}`
+    // Add cache-buster to ensure we see the latest processed version
+    const videoSrc = `${baseVideoSrc}?t=${new Date().getTime()}`
 
     const handleDownload = (e: React.MouseEvent) => {
         e.stopPropagation()
         const link = document.createElement('a')
-        link.href = videoSrc
+        link.href = baseVideoSrc // Use base for download
         link.download = `${reel.id}.mp4`
         document.body.appendChild(link)
         link.click()
@@ -43,7 +45,7 @@ export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCar
             <video
                 ref={videoRef}
                 src={videoSrc}
-                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500"
+                className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-500"
                 autoPlay
                 muted
                 loop
@@ -51,36 +53,25 @@ export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCar
             />
 
             {/* Ready Badge */}
-            <div className="absolute top-2 right-2 z-20">
-                <div className="bg-emerald-500 text-black text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse">
-                    <CheckCircle className="w-3 h-3" /> READY
+            <div className="absolute top-4 right-4 z-20">
+                <div className="bg-emerald-500 text-black text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-[0_0_20px_rgba(16,185,129,0.6)] animate-pulse">
+                    <CheckCircle className="w-3.5 h-3.5" /> READY
                 </div>
             </div>
 
             {/* Download Button Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30">
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-30">
                 <Button
-                    size="sm"
-                    className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold rounded-full shadow-glow py-5 px-6"
+                    size="lg"
+                    className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold rounded-full shadow-[0_0_30px_rgba(16,185,129,0.5)] py-6 px-10 transition-transform active:scale-95"
                     onClick={handleDownload}
                 >
-                    <Download className="w-4 h-4 mr-2" /> Download
+                    <Download className="w-5 h-5 mr-2.5" /> Download MP4
                 </Button>
             </div>
 
-            {/* User Overlay */}
-            <div className="absolute bottom-3 left-3 z-10">
-                <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-medium text-white border border-white/10">
-                    @{reel.username}
-                </div>
-            </div>
-
-            {/* Bottom Gradient Overlay */}
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black via-black/40 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-            <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <p className="text-[10px] text-zinc-400 font-mono italic">#{reel.id.slice(0, 8)}</p>
-            </div>
+            {/* Darker Bottom Gradient for legibility */}
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none" />
         </div>
     )
 }
