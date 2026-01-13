@@ -45,6 +45,7 @@ export async function getAccounts(creds: PublerCredentials): Promise<PublerAccou
     }
 
     const data = await res.json();
+    console.log(`[Publer] Accounts fetched:`, JSON.stringify(data, null, 2));
     // API returns array of accounts
     return data;
 }
