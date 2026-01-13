@@ -79,7 +79,8 @@ export async function createScrapeJob(formData: FormData) {
 
         // Execute python script with output dir AND max_count
         console.log(`Running python script: ${scriptPath} for ${url} -> ${jobDirAbs} (Max: ${reelsCount})`)
-        const { stdout } = await execAsync(`python3 "${scriptPath}" "${url}" "${jobDirAbs}" "${reelsCount}"`)
+        const venvPython = path.join(process.cwd(), ".venv", "bin", "python3")
+        const { stdout } = await execAsync(`"${venvPython}" "${scriptPath}" "${url}" "${jobDirAbs}" "${reelsCount}"`)
 
         // Parse result
         let mappedReels = []
@@ -285,7 +286,8 @@ export async function startProcessingJob(formData: FormData) {
     const scriptPath = path.join(process.cwd(), "scripts", "process_batch.py")
     console.log(`Spawning processing script: ${scriptPath} for ${jobId}`)
 
-    const child = exec(`python3 "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
+    const venvPython = path.join(process.cwd(), ".venv", "bin", "python3")
+    const child = exec(`"${venvPython}" "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
         activeJobs.delete(jobId) // Remove when finished
         if (error) {
             console.error(`Processing script error for ${jobId}:`, stderr)
