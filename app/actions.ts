@@ -7,6 +7,8 @@ import path from "path"
 import { randomUUID } from "crypto"
 import { redirect } from "next/navigation"
 
+import { getAccounts, getWorkspaces, getPosts, uploadMedia, schedulePost, PublerCredentials } from "@/lib/publer"
+
 const execAsync = promisify(exec)
 const DB_PATH = path.join(process.cwd(), "data", "jobs.json")
 const PRESET_PATH = path.join(process.cwd(), "data", "presets.json")
@@ -380,5 +382,119 @@ export async function savePreset(config: any, logoPath?: string) {
         await fs.writeFile(PRESET_PATH, JSON.stringify(config, null, 2), "utf-8")
     } catch (e) {
         console.error("Failed to save preset", e)
+    }
+}
+
+export async function getPublerAccounts(apiKey: string, workspaceId: string) {
+    try {
+        return await getAccounts({ apiKey, workspaceId })
+    } catch (e: any) {
+        throw new Error(e.message)
+    }
+}
+
+
+export async function getPublerWorkspaces(apiKey: string) {
+    try {
+        return await getWorkspaces(apiKey)
+    } catch (e: any) {
+        throw new Error(e.message)
+    }
+}
+
+
+export async function getPublerPosts(apiKey: string, workspaceId: string) {
+    try {
+        return await getPosts({ apiKey, workspaceId }, { state: 'scheduled', limit: 20 })
+    } catch (e: any) {
+        throw new Error(e.message)
+    }
+}
+
+export async function scheduleBatchToPubler(
+    jobId: string,
+    items: { reelId: string, caption: string, scheduledAt: string }[],
+    creds: PublerCredentials,
+    accountIds: string[]
+) {
+    // 1. Get Job & Verify
+    const job = await getJob(jobId)
+    if (!job) throw new Error("Job not found")
+
+    const results = []
+
+    // 2. Loop items
+    for (const item of items) {
+        const reel = job.reels.find((r: any) => r.id === item.reelId)
+        if (!reel || !reel.processed_path) {
+            results.push({ reelId: item.reelId, status: "error", message: "Reel not processed" })
+            continue
+        }
+
+        try {
+            // Absolute path to video
+            const videoPath = path.join(process.cwd(), "public", "downloads", jobId, reel.processed_path)
+
+            // Upload
+            const mediaId = await uploadMedia(videoPath, creds)
+
+            // Schedule
+            const post = await schedulePost({
+                text: item.caption,
+                mediaIds: [mediaId],
+                accountIds: accountIds,
+                scheduledAt: item.scheduledAt || undefined
+            }, creds)
+
+            results.push({ reelId: item.reelId, status: "success", jobId: post.job_id })
+
+        } catch (e: any) {
+            console.error(e)
+            results.push({ reelId: item.reelId, status: "error", message: e.message })
+        }
+    }
+
+    return results
+}
+
+export async function generateCaptionWithGemini(apiKey: string, context: string) {
+    if (!apiKey) throw new Error("API Key is required")
+
+    // Safety: Minimal Prompt Injection guard (basic)
+    // In a real app, we'd do more, but here we trust the user's key + context is simple text
+
+    const prompt = `You are a social media expert. Generate a catchy, engaging caption for an Instagram Reel with the following context/title: "${context}". 
+    Include 3-5 relevant hashtags. Keep it under 2200 characters but make it fun. 
+    Return ONLY the caption text, no quotes or preamble.`
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            })
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Gemini API Error: ${response.status} - ${errorText}`)
+        }
+
+        const data = await response.json()
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+        if (!text) throw new Error("No caption generated")
+
+        return text.trim()
+    } catch (error) {
+        console.error("Gemini Generation Error:", error)
+        throw error
     }
 }
