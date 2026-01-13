@@ -443,7 +443,7 @@ export async function scheduleBatchToPubler(
             // to populate the 'networks' object in the API payload.
             const allAccounts = await getAccounts(creds); // Cache this widely if possible, but okay for batch here
             const selectedAccounts = allAccounts.filter(a => accountIds.includes(a.id));
-            const networkKeys = Array.from(new Set(selectedAccounts.map(a => a.type)));
+            const networkKeys = Array.from(new Set(selectedAccounts.map(a => a.provider || a.type)));
 
             console.log(`[Batch] Scheduling for networks: ${networkKeys.join(', ')}`);
 
