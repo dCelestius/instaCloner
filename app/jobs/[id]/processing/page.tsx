@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils"
 import { SiteHeader } from "@/components/site-header"
 import { ProcessedVideoCard } from "@/components/processed-video-card"
 
+import { Skeleton } from "@/components/ui/skeleton"
+
 export default function ProcessingPage() {
     const params = useParams()
     const router = useRouter()
@@ -79,7 +81,28 @@ export default function ProcessingPage() {
         }
     }
 
-    if (!job) return <div className="min-h-screen bg-black flex items-center justify-center text-slate-400 animate-pulse tracking-widest uppercase text-xs font-bold">Loading Job...</div>
+    if (!job) return (
+        <div className="min-h-screen bg-black text-slate-50 flex flex-col pt-24 pb-8">
+            <SiteHeader
+                step={4}
+                backUrl={`/jobs/${params.id}`}
+                rightContent={<Skeleton className="h-4 w-32 bg-zinc-800" />}
+            />
+            <div className="flex-1 p-6 container max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {[...Array(8)].map((_, i) => (
+                        <div key={i} className="flex flex-col gap-2">
+                            <Skeleton className="aspect-[9/16] rounded-xl bg-zinc-900 border border-white/5" />
+                            <div className="px-1 flex justify-between items-center opacity-60">
+                                <Skeleton className="h-3 w-20 bg-zinc-900" />
+                                <Skeleton className="h-3 w-24 bg-zinc-900" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
 
     return (
 
@@ -123,10 +146,7 @@ export default function ProcessingPage() {
                                 initial={{ opacity: 0, scale: 0.8, y: 50 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 transition={{
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 30,
-                                    mass: 0.8
+                                    type: "spring", stiffness: 300, damping: 30, mass: 0.8
                                 }}
                                 className="flex flex-col gap-2"
                             >
@@ -137,6 +157,36 @@ export default function ProcessingPage() {
                                 <div className="px-1 flex justify-between items-center opacity-60">
                                     <p className="text-[10px] font-mono text-zinc-500 truncate">REF: {reel.id}</p>
                                     <p className="text-[10px] font-medium text-emerald-500/80">@{reel.username}</p>
+                                </div>
+                            </motion.div>
+                        ))}
+
+                        {/* Pending Cards (Skeletons) */}
+                        {pendingReels.map((reel) => (
+                            <motion.div
+                                key={reel.id}
+                                layout
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex flex-col gap-2"
+                            >
+                                <div className="relative aspect-[9/16] rounded-xl overflow-hidden border border-white/5 bg-zinc-900/50 flex items-center justify-center group overflow-hidden">
+                                    <Skeleton className="absolute inset-0 bg-zinc-900" />
+                                    <div className="relative z-10 flex flex-col items-center gap-3">
+                                        <div className="relative">
+                                            <Loader2 className="w-8 h-8 text-emerald-500/20 animate-spin" />
+                                            <Loader2 className="w-8 h-8 text-emerald-500 absolute inset-0 animate-pulse" />
+                                        </div>
+                                        <p className="text-[10px] font-bold text-emerald-500/40 uppercase tracking-widest animate-pulse">Processing...</p>
+                                    </div>
+
+                                    {/* Shimmer effect */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-shimmer" />
+                                </div>
+                                <div className="px-1 flex justify-between items-center opacity-40">
+                                    <Skeleton className="h-3 w-16 bg-zinc-900" />
+                                    <Skeleton className="h-3 w-20 bg-zinc-900" />
                                 </div>
                             </motion.div>
                         ))}
@@ -183,8 +233,15 @@ export default function ProcessingPage() {
                     0% { transform: translateX(-100%); }
                     100% { transform: translateX(100%); }
                 }
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
                 .animate-progress {
                     animation: progress 1.5s infinite linear;
+                }
+                .animate-shimmer {
+                    animation: shimmer 2s infinite linear;
                 }
                 .shadow-glow {
                     box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
