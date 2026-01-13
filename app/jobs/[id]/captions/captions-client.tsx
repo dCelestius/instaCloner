@@ -156,24 +156,16 @@ export default function CaptionsClient({ job, jobId, initialConfigured }: Captio
                     </div>
 
                     <div className="flex items-center gap-3 bg-zinc-900/50 p-2 rounded-xl border border-white/5">
-                        {!isEnvConfigured && (
-                            <div className="relative">
-                                <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-violet-400" />
-                                <Input
-                                    type="password"
-                                    placeholder="Gemini API Key"
-                                    value={geminiApiKey}
-                                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                                    className="pl-9 bg-black border-white/10 w-64 h-10 focus:border-violet-500/50"
-                                />
-                            </div>
-                        )}
-                        {isEnvConfigured && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-xs font-medium">
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                API Key Configured
-                            </div>
-                        )}
+                        <div className="relative">
+                            <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-violet-400" />
+                            <Input
+                                type="password"
+                                placeholder={isEnvConfigured ? "Using System Key (Enter to override)" : "Gemini API Key"}
+                                value={geminiApiKey}
+                                onChange={(e) => setGeminiApiKey(e.target.value)}
+                                className="pl-9 bg-black border-white/10 w-64 h-10 focus:border-violet-500/50"
+                            />
+                        </div>
                         <Button
                             onClick={handleGenerateCaptions}
                             disabled={isGenerating || (!geminiApiKey && !isEnvConfigured) || selectedReels.size === 0}
