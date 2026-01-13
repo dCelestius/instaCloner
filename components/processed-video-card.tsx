@@ -70,6 +70,22 @@ export function ProcessedVideoCard({ reel, jobId, className, previewCorrection =
         setTimeout(() => setIsCopied(false), 2000)
     }
 
+    const handleMouseEnter = () => {
+        if (videoRef.current) {
+            const playPromise = videoRef.current.play()
+            if (playPromise !== undefined) {
+                playPromise.catch(() => {})
+            }
+        }
+    }
+
+    const handleMouseLeave = () => {
+        if (videoRef.current) {
+            videoRef.current.pause()
+            videoRef.current.currentTime = 0
+        }
+    }
+
     return (
         <div className={cn("flex flex-col gap-3 group/card", className)}>
             <div
@@ -77,12 +93,13 @@ export function ProcessedVideoCard({ reel, jobId, className, previewCorrection =
                     "relative aspect-[9/16] bg-black rounded-xl overflow-hidden border border-white/10 shadow-lg group-hover/card:border-emerald-500/50 transition-colors"
                 )}
                 style={{ containerType: 'size' }}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
             >
                 <video
                     ref={videoRef}
                     src={videoSrc}
                     className="w-full h-full object-cover opacity-90 group-hover/card:opacity-100 transition-opacity duration-500"
-                    autoPlay
                     muted
                     loop
                     playsInline
