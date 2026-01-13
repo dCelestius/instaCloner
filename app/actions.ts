@@ -313,7 +313,7 @@ export async function startProcessingJob(formData: FormData) {
             logoToSave = logoPath
         } catch { }
 
-        await savePreset(config, logoToSave)
+        await savePreset("Last Used", config, logoToSave)
     }
 
     return { success: true }
@@ -418,37 +418,74 @@ export async function createJobZip(jobId: string) {
     })
 }
 
-export async function getLatestPreset() {
+export async function getPresets() {
     try {
         await ensureDb()
         const data = await fs.readFile(PRESET_PATH, "utf-8")
-        const preset = JSON.parse(data)
+        const presets = JSON.parse(data) // Expected: Record<string, PresetConfig>
 
-        // Check if public logo exists
-        try {
-            await fs.access(PERSISTED_LOGO_PATH)
-            preset.designLogo = "/persistent/logo.png"
-        } catch { }
-
-        return preset
+        // Return as array for easier frontend handling
+        return Object.entries(presets).map(([name, config]: [string, any]) => ({
+            name,
+            ...config
+        }))
     } catch {
-        return null
+        return []
     }
 }
 
-export async function savePreset(config: any, logoPath?: string) {
+export async function savePreset(name: string, config: any, logoPath?: string) {
     try {
         await ensureDb()
 
+        // Read existing
+        let presets: Record<string, any> = {}
+        try {
+            const data = await fs.readFile(PRESET_PATH, "utf-8")
+            presets = JSON.parse(data)
+        } catch { }
+
+        // Handle Logo Persistence
+        // We save it to public/persistent/preset_{sanitized_name}_logo.png
         if (logoPath) {
-            const dir = path.dirname(PERSISTED_LOGO_PATH)
+            const sanitized = name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+            const persistentName = `preset_${sanitized}_logo.png`
+            const persistentPath = path.join(process.cwd(), "public", "persistent", persistentName)
+
+            const dir = path.dirname(persistentPath)
             await fs.mkdir(dir, { recursive: true })
-            await fs.copyFile(logoPath, PERSISTED_LOGO_PATH)
+
+            await fs.copyFile(logoPath, persistentPath)
+            config.designLogo = `/persistent/${persistentName}`
         }
 
-        await fs.writeFile(PRESET_PATH, JSON.stringify(config, null, 2), "utf-8")
-    } catch (e) {
+        // Update or Add
+        presets[name] = {
+            ...config,
+            updatedAt: new Date().toISOString()
+        }
+
+        await atomicWriteJson(PRESET_PATH, presets)
+        return { success: true }
+    } catch (e: any) {
         console.error("Failed to save preset", e)
+        throw new Error("Failed to save preset: " + e.message)
+    }
+}
+
+export async function deletePreset(name: string) {
+    try {
+        await ensureDb()
+        const data = await fs.readFile(PRESET_PATH, "utf-8")
+        const presets = JSON.parse(data)
+
+        if (presets[name]) {
+            delete presets[name]
+            await atomicWriteJson(PRESET_PATH, presets)
+        }
+        return { success: true }
+    } catch (e) {
+        throw new Error("Failed to delete preset")
     }
 }
 

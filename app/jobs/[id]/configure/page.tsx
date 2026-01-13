@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import { useParams, useRouter } from "next/navigation"
-import { Wand2, Image as ImageIcon, Check, ChevronRight, Upload, X, RotateCcw, LayoutTemplate } from "lucide-react"
+import { Wand2, Image as ImageIcon, Check, ChevronRight, Upload, X, RotateCcw, LayoutTemplate, Save, Trash2, Library, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { SiteHeader } from "@/components/site-header"
 import { cn } from "@/lib/utils"
 // Server action
-import { getJob, startProcessingJob, getLatestPreset } from "@/app/actions"
+import { getJob, startProcessingJob, getPresets, savePreset, deletePreset } from "@/app/actions"
 
 export default function ConfigurePage() {
     const params = useParams()
@@ -27,6 +27,12 @@ export default function ConfigurePage() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [sampleVideoUrl, setSampleVideoUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
+
+    // Presets Only
+    const [presets, setPresets] = useState<any[]>([])
+    const [showSaveDialog, setShowSaveDialog] = useState(false)
+    const [newPresetName, setNewPresetName] = useState("")
+    const [isPreserving, setIsPreserving] = useState(false) // Loading state for save
 
     // Upload Mode State
     const [headerImage, setHeaderImage] = useState<string | null>(null)
@@ -79,36 +85,119 @@ export default function ConfigurePage() {
     }, [params.id])
 
     // Load Presets
-    useEffect(() => {
-        async function loadPresets() {
-            const preset = await getLatestPreset()
-            if (preset) {
-                if (preset.designName) setDesignName(preset.designName)
-                if (preset.designHandle) setDesignHandle(preset.designHandle)
-                if (preset.designBgColor) setDesignBgColor(preset.designBgColor)
-                if (preset.designOpacity) setDesignOpacity(preset.designOpacity)
-                if (preset.logoSize) setLogoSize(preset.logoSize)
-                if (preset.nameFontSize) setNameFontSize(preset.nameFontSize)
-                if (preset.nameColor) setNameColor(preset.nameColor)
-                if (preset.badgeSize) setBadgeSize(preset.badgeSize)
-                if (preset.handleFontSize) setHandleFontSize(preset.handleFontSize)
-                if (preset.handleColor) setHandleColor(preset.handleColor)
-                if (preset.headlineFontSize) setHeadlineFontSize(preset.headlineFontSize)
-                if (preset.headlineColor) setHeadlineColor(preset.headlineColor)
-                if (preset.headlineMode) setHeadlineMode(preset.headlineMode)
-                if (preset.manualHeadline) setManualHeadline(preset.manualHeadline)
-                if (preset.showHeadline !== undefined) setShowHeadline(preset.showHeadline)
-
-                if (preset.designLogo) {
-                    setDesignLogo(preset.designLogo)
-                    // Note: We don't set designLogoFile because we can't recreate a File object 
-                    // from a URL easily, but the server action will use the PERSISTED_LOGO_PATH 
-                    // if it exists, or the user can re-upload.
-                }
-            }
+    async function loadPresetsList() {
+        try {
+            const data = await getPresets()
+            setPresets(data)
+            return data
+        } catch (e) {
+            console.error("Failed to load presets", e)
+            return []
         }
-        loadPresets()
+    }
+
+    const applyPreset = (preset: any) => {
+        if (!preset) return
+        if (preset.designName) setDesignName(preset.designName)
+        if (preset.designHandle) setDesignHandle(preset.designHandle)
+        if (preset.designBgColor) setDesignBgColor(preset.designBgColor)
+        if (preset.designOpacity) setDesignOpacity(preset.designOpacity)
+        if (preset.logoSize) setLogoSize(preset.logoSize)
+        if (preset.nameFontSize) setNameFontSize(preset.nameFontSize)
+        if (preset.nameColor) setNameColor(preset.nameColor)
+        if (preset.badgeSize) setBadgeSize(preset.badgeSize)
+        if (preset.handleFontSize) setHandleFontSize(preset.handleFontSize)
+        if (preset.handleColor) setHandleColor(preset.handleColor)
+        if (preset.headlineFontSize) setHeadlineFontSize(preset.headlineFontSize)
+        if (preset.headlineColor) setHeadlineColor(preset.headlineColor)
+        if (preset.headlineMode) setHeadlineMode(preset.headlineMode)
+        if (preset.manualHeadline) setManualHeadline(preset.manualHeadline)
+        if (preset.showHeadline !== undefined) setShowHeadline(preset.showHeadline)
+
+        if (preset.designLogo) {
+            setDesignLogo(preset.designLogo)
+            // Note: We don't set designLogoFile
+        }
+    }
+
+    useEffect(() => {
+        loadPresetsList().then(data => {
+            // Auto-load Last Used if available
+            const lastUsed = data.find((p: any) => p.name === "Last Used")
+            if (lastUsed) applyPreset(lastUsed)
+        })
     }, [])
+
+    const handleSavePreset = async () => {
+        if (!newPresetName.trim()) return
+        setIsPreserving(true)
+        try {
+            // Build Config object (same as formData but pure object)
+            const config = {
+                designName, designHandle, designBgColor, designOpacity,
+                logoSize, nameFontSize, nameColor, badgeSize,
+                handleFontSize, handleColor, headlineFontSize, headlineColor,
+                showHeadline, headlineMode, manualHeadline
+            }
+
+            // We need to resolve logo path on server or upload new one?
+            // savePreset action expects a *path* to an existing logo if we want to copy it to persistent.
+            // BUT: designLogoFile is a File object. We can't pass File to server action in `savePreset(name, config, logoPath)`.
+            // Solution: 
+            // 1. If designLogoFile is set, we can't easily upload it via this simple action without FormData. 
+            //    Or we could upload it to a temp path first? No that's complex.
+            //    Wait, `designLogo` (string) might be a blob url (if new file) OR a server path (if from preset/disk).
+            //    If it's a server path, we can pass it.
+            //    If it's a blob URL, we actually need to UPLOAD the file to get it on server.
+            //    Since we aren't submitting the job yet, we don't have a job folder to dump it in easily?
+            //    Actually we do have `public/downloads/{jobId}`.
+            //    But for simplicity: Let's assume user uploads logo -> We rely on "Last Used" flow usually.
+            //    OR: We Update savePreset to handle logic? No.
+            //    
+            //    COMPROMISE: If user just uploaded a logo (Blob URL), saving preset might fail to persist that NEW logo unless we upload it.
+            //    However, `startProcessingJob` handles "Last Used" perfectly.
+            //    For explicit "Save Preset", let's ignore the NEW file if it's a Blob, and only support persisting if we have a path.
+            //    OR check if `designLogo` starts with `/` (server path). 
+            //    If it is a Blob, we warn user or just don't save the logo part?
+            //    Actually, we can't save the logo part if it's a blob. 
+            //    For now, let's just pass `undefined` as logoPath if it's a blob, and `designLogo` string if it's a path.
+
+            let logoPathToSave: string | undefined = undefined
+            if (designLogo && !designLogo.startsWith("blob:")) {
+                // It's a server path, likely /persistent/... or /downloads/...
+                // We need to convert public URL to filesystem path for `fs.copyFile`?
+                // `savePreset` expects an absolute path or relative?
+                // Look at actions.ts: `if (logoPath) { ... await fs.copyFile(logoPath, ...)`
+                // It needs a FS path.
+                // Our `designLogo` is a URL like `/persistent/foo.png`.
+                // We need to map it back to `public/...`.
+                logoPathToSave = "public" + designLogo
+                // Note: This relies on CWD being project root.
+            }
+
+            await savePreset(newPresetName, config, logoPathToSave)
+
+            setNewPresetName("")
+            setShowSaveDialog(false)
+            await loadPresetsList()
+        } catch (e) {
+            console.error(e)
+            alert("Failed to save preset")
+        } finally {
+            setIsPreserving(false)
+        }
+    }
+
+    const handleDeletePreset = async (name: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!confirm(`Delete preset "${name}"?`)) return
+        try {
+            await deletePreset(name)
+            await loadPresetsList()
+        } catch (e) {
+            alert("Failed to delete")
+        }
+    }
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isLogo = false) => {
         if (e.target.files && e.target.files[0]) {
@@ -300,6 +389,84 @@ export default function ConfigurePage() {
                             ) : (
                                 <div className="space-y-6">
                                     {/* Design Mode Inputs */}
+
+                                    {/* Presets Bar */}
+                                    <div className="bg-zinc-950/50 border border-white/5 rounded-xl p-3 mb-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Library className="w-3 h-3 text-emerald-500" />
+                                                Brand Presets
+                                            </h3>
+                                            <button
+                                                onClick={() => setShowSaveDialog(!showSaveDialog)}
+                                                className="text-[9px] text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1 uppercase tracking-wider"
+                                            >
+                                                <Plus className="w-3 h-3" /> Save Current
+                                            </button>
+                                        </div>
+
+                                        {/* Save Dialog (Inline) */}
+                                        {showSaveDialog && (
+                                            <div className="flex items-center gap-2 mb-3 bg-black/40 p-1.5 rounded border border-emerald-500/30 animate-in fade-in slide-in-from-top-1">
+                                                <Input
+                                                    value={newPresetName}
+                                                    onChange={e => setNewPresetName(e.target.value)}
+                                                    placeholder="Preset Name (e.g. My Brand)"
+                                                    className="h-6 text-[10px] bg-transparent border-none focus-visible:ring-0 px-2"
+                                                    autoFocus
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    className="h-6 px-2 text-[10px] bg-emerald-500 text-black hover:bg-emerald-400"
+                                                    disabled={!newPresetName || isPreserving}
+                                                    onClick={handleSavePreset}
+                                                >
+                                                    Save
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 p-0 text-zinc-500 hover:text-white"
+                                                    onClick={() => setShowSaveDialog(false)}
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                                            {presets.length === 0 && (
+                                                <div className="text-[10px] text-zinc-600 italic px-1">
+                                                    No presets saved yet.
+                                                </div>
+                                            )}
+                                            {presets.map(p => (
+                                                <div
+                                                    key={p.name}
+                                                    onClick={() => applyPreset(p)}
+                                                    className="flex items-center gap-2 bg-zinc-900 border border-white/10 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-zinc-800 hover:border-white/20 transition-all shrink-0 group"
+                                                >
+                                                    {p.designLogo ? (
+                                                        <img src={p.designLogo} className="w-4 h-4 rounded-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-4 h-4 rounded-full bg-zinc-800 border border-white/10" />
+                                                    )}
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-medium text-zinc-300">{p.name}</span>
+                                                    </div>
+                                                    {p.name !== "Last Used" && (
+                                                        <button
+                                                            onClick={(e) => handleDeletePreset(p.name, e)}
+                                                            className="ml-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     {/* Design Mode Inputs - Compact & Precise */}
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between mb-1">
