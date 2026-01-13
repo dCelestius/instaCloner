@@ -91,11 +91,15 @@ export default function ProcessingPage() {
             <div className="flex-1 p-6 container max-w-7xl mx-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {[...Array(8)].map((_, i) => (
-                        <div key={i} className="flex flex-col gap-2">
+                        <div key={i} className="flex flex-col gap-3">
                             <Skeleton className="aspect-[9/16] rounded-xl bg-zinc-900 border border-white/5" />
-                            <div className="px-1 flex justify-between items-center opacity-60">
-                                <Skeleton className="h-3 w-20 bg-zinc-900" />
-                                <Skeleton className="h-3 w-24 bg-zinc-900" />
+                            <div className="p-3 bg-zinc-900/20 border border-white/5 rounded-lg flex flex-col gap-1.5">
+                                <Skeleton className="h-2.5 w-full bg-zinc-900" />
+                                <Skeleton className="h-2.5 w-2/3 bg-zinc-900" />
+                            </div>
+                            <div className="px-1 flex justify-between items-center opacity-40">
+                                <Skeleton className="h-2 w-16 bg-zinc-900" />
+                                <Skeleton className="h-2 w-20 bg-zinc-900" />
                             </div>
                         </div>
                     ))}
@@ -154,9 +158,9 @@ export default function ProcessingPage() {
                                     reel={reel}
                                     jobId={params.id as string}
                                 />
-                                <div className="px-1 flex justify-between items-center opacity-60">
-                                    <p className="text-[10px] font-mono text-zinc-500 truncate">REF: {reel.id}</p>
-                                    <p className="text-[10px] font-medium text-emerald-500/80">@{reel.username}</p>
+                                <div className="px-1 flex justify-between items-center opacity-40 -mt-1 mb-2">
+                                    <p className="text-[9px] font-mono text-zinc-500 truncate uppercase tracking-tighter">REF: {reel.id}</p>
+                                    <p className="text-[9px] font-bold text-emerald-500/50 uppercase tracking-tighter">@{reel.username}</p>
                                 </div>
                             </motion.div>
                         ))}
@@ -169,7 +173,7 @@ export default function ProcessingPage() {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
-                                className="flex flex-col gap-2"
+                                className="flex flex-col gap-3"
                             >
                                 <div className="relative aspect-[9/16] rounded-xl overflow-hidden border border-white/5 bg-zinc-900/50 flex items-center justify-center group overflow-hidden">
                                     <Skeleton className="absolute inset-0 bg-zinc-900" />
@@ -184,9 +188,16 @@ export default function ProcessingPage() {
                                     {/* Shimmer effect */}
                                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-shimmer" />
                                 </div>
+
+                                {/* Caption Skeleton */}
+                                <div className="p-3 bg-zinc-900/20 border border-white/5 rounded-lg flex flex-col gap-2">
+                                    <Skeleton className="h-2 w-full bg-zinc-900" />
+                                    <Skeleton className="h-2 w-3/4 bg-zinc-900" />
+                                </div>
+
                                 <div className="px-1 flex justify-between items-center opacity-40">
-                                    <Skeleton className="h-3 w-16 bg-zinc-900" />
-                                    <Skeleton className="h-3 w-20 bg-zinc-900" />
+                                    <Skeleton className="h-2 w-16 bg-zinc-900" />
+                                    <Skeleton className="h-2 w-20 bg-zinc-900" />
                                 </div>
                             </motion.div>
                         ))}
