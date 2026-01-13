@@ -181,8 +181,64 @@ export async function schedulePost(
     }
 
     const data = await res.json();
-    console.log('[Publer] Scheduling Response:', JSON.stringify(data, null, 2));
-    return data;
+    console.log('[Publer] Scheduling job initiated:', data.job_id);
+
+    // Provide immediate feedback if no job_id (unexpected)
+    if (!data.job_id) {
+        console.error('[Publer] No job_id returned', data);
+        return data;
+    }
+
+    // Wait for the job to complete
+    return await waitForJob(data.job_id, creds);
+}
+
+export interface PublerJobStatus {
+    status: 'working' | 'complete' | 'failed' | 'success' | 'completed';
+    job_id: string;
+    payload?: any;
+    failures?: any[];
+}
+
+export async function getJobStatus(jobId: string, creds: PublerCredentials): Promise<PublerJobStatus> {
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer-API ${creds.apiKey}`,
+    };
+    if (creds.workspaceId) {
+        headers['Publer-Workspace-Id'] = creds.workspaceId;
+    }
+
+    const res = await fetch(`${BASE_URL}/job_status/${jobId}`, { headers });
+    if (!res.ok) {
+        throw new Error(`Failed to get job status: ${res.status}`);
+    }
+    return await res.json();
+}
+
+async function waitForJob(jobId: string, creds: PublerCredentials, maxAttempts = 20): Promise<any> {
+    console.log(`[Publer] Polling job ${jobId}...`);
+
+    for (let i = 0; i < maxAttempts; i++) {
+        const status = await getJobStatus(jobId, creds);
+        console.log(`[Publer] Job ${jobId} status: ${status.status}`);
+
+        if (status.status === 'failed') {
+            const failMsg = status.failures ? JSON.stringify(status.failures) : 'Unknown error';
+            throw new Error(`Publer job failed: ${failMsg}`);
+        }
+
+        // Publer sometimes returns 'complete' or 'completed' or 'success' depending on the specific job type endpoints
+        // For scheduling, valid states are usually 'working' -> 'success'/'complete'
+        if (status.status === 'complete' || status.status === 'success' || status.status === 'completed') {
+            console.log(`[Publer] Job ${jobId} completion payload:`, JSON.stringify(status.payload || status, null, 2));
+            return status.payload || status;
+        }
+
+        // Wait 1s
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    throw new Error(`Job ${jobId} timed out after ${maxAttempts}s`);
 }
 
 export async function getPosts(
