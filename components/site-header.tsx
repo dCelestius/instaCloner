@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 interface SiteHeaderProps {
-    step: 1 | 2 | 3 | 4 | 5
+    step: 1 | 2 | 3 | 4 | 5 | 6
     backUrl?: string
     rightContent?: React.ReactNode
 }
@@ -21,7 +21,8 @@ export function SiteHeader({ step, backUrl, rightContent }: SiteHeaderProps) {
         { id: 2, label: "Review" },
         { id: 3, label: "Brand" },
         { id: 4, label: "Export" },
-        { id: 5, label: "Schedule" },
+        { id: 5, label: "Captions" },
+        { id: 6, label: "Schedule" },
     ]
 
     return (

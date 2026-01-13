@@ -240,9 +240,9 @@ export default function ProcessingPage() {
                 <Button
                     size="lg"
                     className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold border border-white/10"
-                    onClick={() => router.push(`/jobs/${params.id}/schedule`)}
+                    onClick={() => router.push(`/jobs/${params.id}/captions`)}
                 >
-                    Next Step: Schedule
+                    Next Step: Captions
                     <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
                 </Button>
             </div>

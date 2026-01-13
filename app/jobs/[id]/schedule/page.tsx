@@ -133,49 +133,6 @@ export default function SchedulePage() {
         }
     }, [authStep])
 
-    // --- Gemini Logic ---
-    const [geminiApiKey, setGeminiApiKey] = useState("")
-    const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false)
-
-    const handleGenerateCaptions = async () => {
-        if (!geminiApiKey) {
-            alert("Please enter a Gemini API Key first")
-            return
-        }
-        if (selectedReels.size === 0) {
-            alert("Please select at least one video to caption")
-            return
-        }
-
-        setIsGeneratingCaptions(true)
-        let successCount = 0
-        let failCount = 0
-
-        const newReels = [...reels]
-
-        for (const reel of newReels) {
-            if (selectedReels.has(reel.id)) {
-                try {
-                    // Use title or filename as context
-                    const context = reel.title || reel.processed_path || "Viral Video"
-                    const caption = await generateCaptionWithGemini(geminiApiKey, context)
-
-                    reel.generated_caption = caption
-                    successCount++
-                    // Optional: Update UI progressively? React state batching might hide it until end
-                } catch (e) {
-                    console.error(`Failed to caption reel ${reel.id}:`, e)
-                    failCount++
-                }
-            }
-        }
-
-        setReels(newReels) // Trigger re-render with new captions
-        setIsGeneratingCaptions(false)
-        alert(`Caption Generation Complete!\nSuccess: ${successCount}\nFailed: ${failCount}`)
-    }
-
-
     // --- Smart Schedule Logic ---
     const calculatedSchedule = useMemo(() => {
         if (scheduleMode === 'manual' || selectedReels.size === 0) return null
@@ -404,7 +361,7 @@ export default function SchedulePage() {
             )}
 
             <SiteHeader
-                step={5}
+                step={6}
                 backUrl={`/jobs/${jobId}/processing`}
             />
 
@@ -443,19 +400,7 @@ export default function SchedulePage() {
                                         className="bg-zinc-950 border-white/10 text-xs"
                                     />
                                 </div>
-                                <div className="space-y-2 pt-2 border-t border-white/5 mt-2">
-                                    <Label className="text-xs text-zinc-400 flex items-center gap-1">
-                                        <Sparkles className="w-3 h-3 text-violet-400" />
-                                        Gemini API Key (Optional)
-                                    </Label>
-                                    <Input
-                                        type="password"
-                                        value={geminiApiKey}
-                                        onChange={(e) => setGeminiApiKey(e.target.value)}
-                                        placeholder="For Magic Captions"
-                                        className="bg-zinc-950 border-white/10 text-xs focus:border-violet-500/50"
-                                    />
-                                </div>
+
 
                                 {!hasCredentials && authStep !== 'connected' && (
                                     <div className="pt-2">
@@ -537,16 +482,7 @@ export default function SchedulePage() {
                                         Select Content <span className="text-zinc-500 text-xs font-normal">({selectedReels.size})</span>
                                     </h2>
                                     <div className="flex gap-1">
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            className="h-7 w-7 border-violet-500/30 hover:bg-violet-500/10 text-violet-300"
-                                            onClick={handleGenerateCaptions}
-                                            disabled={isGeneratingCaptions || !geminiApiKey}
-                                            title="Magic Captions"
-                                        >
-                                            {isGeneratingCaptions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                        </Button>
+
                                         <Button size="sm" variant="ghost" className="text-[10px] h-7 px-2" onClick={() => {
                                             if (selectedReels.size === reels.length) setSelectedReels(new Set())
                                             else setSelectedReels(new Set(reels.map(r => r.id)))

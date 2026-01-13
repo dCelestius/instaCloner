@@ -166,6 +166,24 @@ export async function createScrapeJob(formData: FormData) {
     redirect(`/jobs/${jobId}`)
 }
 
+export async function updateJobReelCaptions(jobId: string, captions: Record<string, string>) {
+    await ensureDb()
+    const db = JSON.parse(await fs.readFile(DB_PATH, "utf-8"))
+
+    if (!db[jobId]) throw new Error("Job not found")
+
+    const job = db[jobId]
+    job.reels = job.reels.map((r: any) => {
+        if (captions[r.id] !== undefined) {
+            return { ...r, generated_caption: captions[r.id] }
+        }
+        return r
+    })
+
+    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+    return { success: true }
+}
+
 export async function getJob(id: string) {
     await ensureDb()
     const db = JSON.parse(await fs.readFile(DB_PATH, "utf-8"))

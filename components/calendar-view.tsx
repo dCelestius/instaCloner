@@ -159,11 +159,11 @@ export function CalendarView({ posts, accounts, proposedPosts = [] }: CalendarVi
 
         return (
             <div key={post.id || Math.random()} className={cn("text-[10px] p-1 mb-1 rounded flex items-center gap-1 overflow-hidden group transition-colors cursor-default border", colorClass)}>
-                <div className={cn("w-1 h-full rounded-full shrink-0", barClass)} />
+                <div className={cn("w-1 self-stretch rounded-full shrink-0", barClass)} />
                 <span className={cn("font-mono shrink-0", timeClass)}>
                     {new Date(post.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="truncate text-zinc-300">{isProposed ? "(Proposed) " : ""}{post.text}</span>
+                <span className="line-clamp-2 text-zinc-300 flex-1 min-w-0 leading-tight whitespace-normal">{isProposed ? "(Proposed) " : ""}{post.text}</span>
             </div>
         )
     }
@@ -221,7 +221,7 @@ export function CalendarView({ posts, accounts, proposedPosts = [] }: CalendarVi
             const isToday = new Date().toDateString() === date.toDateString()
 
             days.push(
-                <div key={i} className="flex-1 min-h-[400px] border-r border-white/5 last:border-r-0 p-2 bg-zinc-900/20 hover:bg-zinc-900/40 transition-colors flex flex-col gap-2">
+                <div key={i} className="flex-1 min-w-0 min-h-[400px] border-r border-white/5 last:border-r-0 p-2 bg-zinc-900/20 hover:bg-zinc-900/40 transition-colors flex flex-col gap-2">
                     <div className={cn("text-center p-2 rounded mb-2", isToday ? "bg-emerald-500/10 text-emerald-400 font-bold" : "text-zinc-400")}>
                         <div className="text-xs uppercase">{date.toLocaleDateString(undefined, { weekday: 'short' })}</div>
                         <div className="text-lg">{date.getDate()}</div>
