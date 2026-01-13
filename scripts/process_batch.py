@@ -418,6 +418,9 @@ def process_batch(job_id):
     auto_detect_pos_str = str(config.get('autoDetectPosition', 'true')).lower()
     auto_detect = (auto_detect_pos_str == 'true')
 
+    # Parse Vertical Correction
+    vertical_correction = int(config.get('verticalCorrection', 0))
+
     print(f"Processing Job {job_id} | Mode: {mode} | AutoDetect: {auto_detect}")
 
     reels = job.get('reels', [])
@@ -534,10 +537,21 @@ def process_batch(job_id):
                         if h_text:
                              avg_char_width = headline_fs * 0.5
                              max_chars = int((width - (padding * 2)) / avg_char_width)
-                             lines_count = len(textwrap.wrap(h_text, width=max_chars))
-                             text_h = lines_count * int(headline_fs * 1.3)
-                             
-                    design_min_h = row1_h + text_h + (padding * 0.4) # Perfect-fit padding multiplier (increased from 0.2)
+                    # Exact layout math from generate_design_overlay:
+                    # pad_v = 12*scale
+                    # gap = 8*scale
+                    
+                    pad_v = int(12 * scale_factor)
+                    gap_v = int(8 * scale_factor)
+                    
+                    if text_h > 0:
+                        # Top Pad + Logo + Middle Pad + Gap + Text + Bottom Pad
+                        extra_space = (pad_v * 3) + gap_v
+                    else:
+                        # Top Pad + Logo + Bottom Pad
+                        extra_space = (pad_v * 2)
+                        
+                    design_min_h = row1_h + text_h + extra_space
 
                     # The Final Height of the Black Bar
                     # Must be at least detected_h (to cover old) and at least design_min_h (to fit new)
@@ -552,7 +566,21 @@ def process_batch(job_id):
                     target_h = int(final_h)
                     content_padding = detected_padding # Use the tight padding from detector
 
+                # APPLY VERTICAL CORRECTION (Global Shift)
+                final_y += vertical_correction
                 
+                # Ensure we don't go off-screen (optional, but good safety)
+                # if final_y < 0: final_y = 0 # Allow negative if user wants to push it up? Maybe.
+
+                # Save computed layout to DB for Frontend Preview
+                reel['layout'] = {
+                    'y': int(final_y),
+                    'h': int(target_h),
+                    'correction': vertical_correction,
+                    'width': width,
+                    'height': height
+                }
+
                 layout_override = (final_y, target_h, content_padding)
                     
                 overlay_img = generate_design_overlay(job_dir, config, width, height, reel, base_dir, layout_override=layout_override)
@@ -592,11 +620,14 @@ def process_batch(job_id):
             reel['processed_path'] = output_filename
             processed_count += 1
             
+            # Save incrementally
+            with open(jobs_file, 'w') as f:
+                json.dump(db, f, indent=2)
+                
         except subprocess.CalledProcessError as e:
             print(f"FFmpeg failed: {e.stderr.decode()}")
 
-    # Update Job
-    # Clear out old processed status? No, we just add to it.
+    # Update Job Status (Global)
     job['status'] = 'completed'
     with open(jobs_file, 'w') as f:
         json.dump(db, f, indent=2)

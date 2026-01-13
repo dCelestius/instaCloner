@@ -12,21 +12,41 @@ interface Reel {
     local_video_path?: string
     processed_path?: string
     caption?: string
+    layout?: { y: number, h: number, correction: number, width?: number, height?: number }
+    generated_headline?: string
 }
 
 interface ProcessedVideoCardProps {
     reel: Reel
     jobId: string
     className?: string
+    previewCorrection?: number | null
+    jobConfig?: any
 }
 
-export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCardProps) {
+export function ProcessedVideoCard({ reel, jobId, className, previewCorrection = null, jobConfig }: ProcessedVideoCardProps) {
     const videoRef = useRef<HTMLVideoElement>(null)
     const [isCopied, setIsCopied] = useState(false)
 
-    const baseVideoSrc = `/downloads/${jobId}/${reel.processed_path || reel.local_video_path}`
+    // Preview Mode Logic
+    const isPreview = previewCorrection !== null
+    // If previewing, fallback to local (original) path so we see the raw video + overlay
+    const baseVideoSrc = isPreview
+        ? `/downloads/${jobId}/${reel.local_video_path}`
+        : `/downloads/${jobId}/${reel.processed_path || reel.local_video_path}`
+
     // Add cache-buster to ensure we see the latest processed version
     const videoSrc = `${baseVideoSrc}?t=${new Date().getTime()}`
+
+    // Calculate simulated overlay position
+    // Use stored layout if available, otherwise guess generic 15%
+    const baselineY = reel.layout ? (reel.layout.y - (reel.layout.correction || 0)) : 0
+    const baselineH = reel.layout ? reel.layout.h : 250 // Fallback px height
+    const baseWidth = reel.layout?.width || 1080
+    const baseHeight = reel.layout?.height || 1920
+
+    // Apply correction (inverted? No, + goes down, - goes up usually)
+    const previewY = baselineY + (previewCorrection || 0)
 
     const handleDownload = (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -56,6 +76,7 @@ export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCar
                 className={cn(
                     "relative aspect-[9/16] bg-black rounded-xl overflow-hidden border border-white/10 shadow-lg group-hover/card:border-emerald-500/50 transition-colors"
                 )}
+                style={{ containerType: 'size' }}
             >
                 <video
                     ref={videoRef}
@@ -66,6 +87,82 @@ export function ProcessedVideoCard({ reel, jobId, className }: ProcessedVideoCar
                     loop
                     playsInline
                 />
+
+
+                {/* PREVIEW OVERLAY BOX (Simulated Design) */}
+                {isPreview && jobConfig && (
+                    <div
+                        className="absolute inset-x-0 z-40 pointer-events-none transition-all duration-200 ease-out flex flex-col items-start px-2 py-1"
+                        style={{
+                            top: `${(previewY / baseHeight) * 100}%`,
+                            height: `${(baselineH / baseHeight) * 100}%`,
+                            backgroundColor: jobConfig.bannerColor || '#000000',
+                            fontFamily: 'sans-serif' // Fallback, we'd need to load fonts but standard sans is close enough for preview
+                        }}
+                    >
+                        {/* This structure mimics generate_design_overlay roughly */}
+                        <div className="flex items-center gap-3 w-full" style={{ paddingTop: '2%' }}>
+                            {/* Logo Proxy */}
+                            <div
+                                className="rounded-full bg-black shrink-0 overflow-hidden relative"
+                                style={{
+                                    width: `${jobConfig.logoSize || 15}%`,
+                                    aspectRatio: '1/1',
+                                    border: '1px solid rgba(255,255,255,0.1)'
+                                }}
+                            >
+                                {/* Use actual logo if available */}
+                                <img
+                                    src={`/downloads/${jobId}/logo.png`}
+                                    alt="Logo"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                        e.currentTarget.parentElement!.style.backgroundColor = 'rgba(255,255,255,0.1)'
+                                    }}
+                                />
+                            </div>
+
+                            <div className="flex flex-col min-w-0 flex-1 justify-center translate-y-[2px]">
+                                <h3 className="font-bold text-white leading-tight truncate flex items-center gap-1" style={{ fontSize: `${((jobConfig.nameFontSize || 18) * 1.35) / 3.8}cqw` }}>
+                                    {jobConfig.designName || jobConfig.name || "user"}
+                                    {/* Verified Badge */}
+                                    {/* Matches process_batch.py: public/Twitter_Verified_Badge_Gold.svg.png */}
+                                    <img
+                                        src="/Twitter_Verified_Badge_Gold.svg.png"
+                                        alt="Verified"
+                                        className="w-[1em] h-[1em] object-contain"
+                                    />
+                                </h3>
+                                <p className="text-white/60 font-medium truncate" style={{ fontSize: `${((jobConfig.handleFontSize || 14) * 1.35) / 3.8}cqw` }}>
+                                    @{jobConfig.designHandle || jobConfig.handle || reel.username}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Headline */}
+                        {(jobConfig.showHeadline ?? true) && (
+                            <div className="mt-2 w-full">
+                                <h2
+                                    className="font-bold text-white leading-[1.3]"
+                                    style={{
+                                        fontSize: `${((jobConfig.headlineFontSize || 24) * 1.35) / 3.8}cqw`,
+                                        color: jobConfig.headlineColor || '#ffffff',
+                                        wordWrap: 'break-word'
+                                    }}
+                                >
+                                    {jobConfig.headlineMode === 'manual'
+                                        ? (jobConfig.manualHeadline || "Your Headline Here")
+                                        : (reel.generated_headline || "AI Headline Pending...")}
+                                </h2>
+                            </div>
+                        )}
+
+                        {/* Green Indicator Border (Visible only on hover or always to show it's active) */}
+                        <div className="absolute inset-0 border-2 border-emerald-500/50 pointer-events-none" />
+
+                    </div>
+                )}
 
                 {/* Ready Badge */}
                 <div className="absolute top-3 right-3 z-20">

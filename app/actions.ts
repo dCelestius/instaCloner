@@ -311,6 +311,46 @@ export async function startProcessingJob(formData: FormData) {
     return { success: true }
 }
 
+export async function applyHeaderCorrection(jobId: string, correction: number) {
+    try {
+        const dbContent = await fs.readFile(DB_PATH, "utf-8")
+        const db = JSON.parse(dbContent)
+
+        if (!db[jobId]) throw new Error("Job not found")
+
+        // Update config
+        if (!db[jobId].config) db[jobId].config = {}
+        db[jobId].config.verticalCorrection = correction
+
+        // Reset processed status to force re-generation
+        db[jobId].status = 'processing'
+        db[jobId].reels = db[jobId].reels.map((r: any) => ({
+            ...r,
+            processed_path: null, // Clear this so UI knows it's working
+            // Generated captions/headlines can stay
+        }))
+
+        await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+
+        // Trigger processing
+        const scriptPath = path.join(process.cwd(), "scripts", "process_batch.py")
+        console.log(`[Correction] Spawning processing script: ${scriptPath} for ${jobId}`)
+
+        const child = exec(`python3 "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
+            activeJobs.delete(jobId)
+            if (error) console.error(`Processing script error for ${jobId}:`, stderr)
+            else console.log(`Processing script success for ${jobId}:`, stdout)
+        })
+        activeJobs.set(jobId, child)
+
+        return { success: true }
+    } catch (e) {
+        console.error("Apply Correction Error:", e)
+        throw e
+    }
+}
+
+
 export async function cancelJob(jobId: string) {
     console.log(`Cancelling job ${jobId}...`)
 
@@ -485,17 +525,53 @@ export async function scheduleBatchToPubler(
     return results
 }
 
-export async function generateCaptionWithGemini(apiKey: string, context: string) {
-    if (!apiKey) throw new Error("API Key is required")
+export async function isGeminiConfigured() {
+    return !!process.env.GEMINI_API_KEY
+}
 
-    // Safety: Minimal Prompt Injection guard (basic)
-    // In a real app, we'd do more, but here we trust the user's key + context is simple text
+export async function generateCaptionWithGemini(apiKey: string, context: string, username?: string, style?: string) {
+    const key = apiKey || process.env.GEMINI_API_KEY
+    if (!key) throw new Error("API Key is required")
 
-    const prompt = `You are a social media expert. Generate a catchy, engaging caption for an Instagram Reel with the following context/title: "${context}". 
-    Include 3-5 relevant hashtags. Keep it under 2200 characters but make it fun. 
-    Return ONLY the caption text, no quotes or preamble.`
+    const handle = username ? `@${username.replace('@', '')}` : "@username"
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+    let prompt = ""
+
+    if (style) {
+        // Single Style Generation
+        let styleInstruction = ""
+        switch (style) {
+            case 'plain': styleInstruction = "A clear rewrite of the context. IMPORTANT: Maintain the original formatting structure (line breaks, lists) if present."; break;
+            case 'cta': styleInstruction = `A version with a strong Call to Action, specifically: "Follow ${handle} to uncover the stories they never told you 🧠. Knowledge has never been this entertaining." (Adapt slightly to context but keep the core CTA).`; break;
+            case 'short': styleInstruction = "Brief, punchy, viral style."; break;
+            case 'question': styleInstruction = "Starts with a hook/question to drive engagement."; break;
+            case 'story': styleInstruction = "A narrative approach, engaging and emotional."; break;
+            default: styleInstruction = "A clear, engaging caption.";
+        }
+
+        prompt = `You are a social media expert. Generate 1 caption variation for an Instagram Reel with the following context/title: "${context}".
+        
+        Style: "${style}" - ${styleInstruction}
+
+        Include 3-5 relevant hashtags.
+        Return a STRICT JSON object with this exact key: "${style}".
+        Do NOT use markdown code blocks. Return ONLY the raw JSON string.`
+    } else {
+        // Fallback: Generate All (Legacy/Default)
+        prompt = `You are a social media expert. Generate 5 distinct caption variations for an Instagram Reel with the following context/title: "${context}".
+        
+        Return a STRICT JSON object with these exact keys:
+        1. "plain": A clear rewrite of the context. IMPORTANT: Maintain the original formatting structure (line breaks, lists) if present.
+        2. "cta": A version with a strong Call to Action, specifically: "Follow ${handle} to uncover the stories they never told you 🧠. Knowledge has never been this entertaining." (Adapt slightly to context but keep the core CTA).
+        3. "short": Brief, punchy, viral style.
+        4. "question": Starts with a hook/question to drive engagement.
+        5. "story": A narrative approach, engaging and emotional.
+
+        Include 3-5 relevant hashtags in each.
+        Do NOT use markdown code blocks. Return ONLY the raw JSON string.`
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`
 
     try {
         const response = await fetch(url, {
@@ -506,7 +582,10 @@ export async function generateCaptionWithGemini(apiKey: string, context: string)
             body: JSON.stringify({
                 contents: [{
                     parts: [{ text: prompt }]
-                }]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
             })
         })
 
@@ -520,7 +599,16 @@ export async function generateCaptionWithGemini(apiKey: string, context: string)
 
         if (!text) throw new Error("No caption generated")
 
-        return text.trim()
+        try {
+            // Clean up potentially markdown wrapped JSON
+            const cleanText = text.replace(/```json\n?|\n?```/g, "").trim()
+            return JSON.parse(cleanText)
+        } catch (e) {
+            console.error("Failed to parse Gemini JSON:", text)
+            // Fallback: return as "plain" if parsing fails but implementation expects object, this might break frontend.
+            // Let's throw to be safe or try to salvage.
+            throw new Error("Failed to parse AI response")
+        }
     } catch (error) {
         console.error("Gemini Generation Error:", error)
         throw error

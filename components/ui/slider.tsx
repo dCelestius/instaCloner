@@ -22,7 +22,7 @@ export function Slider({ className, value, onValueChange, max = 100, step = 1, .
         <div className={cn("relative flex w-full touch-none select-none items-center", className)}>
             <input
                 type="range"
-                min={0}
+                min={props.min}
                 max={max}
                 step={step}
                 value={val}
