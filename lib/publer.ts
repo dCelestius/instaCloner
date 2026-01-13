@@ -70,12 +70,29 @@ export async function uploadMedia(
     localPath: string,
     creds: PublerCredentials
 ): Promise<string> {
+    console.log(`[Publer] Reading file from: ${localPath}`);
+    try {
+        const stats = await fs.stat(localPath);
+        console.log(`[Publer] File size: ${stats.size} bytes`);
+    } catch (e) {
+        console.error(`[Publer] File not found or not accessible: ${localPath}`);
+        throw new Error(`Local file not found: ${localPath}`);
+    }
+
     const fileBuffer = await fs.readFile(localPath);
     const filename = path.basename(localPath);
+    const ext = path.extname(filename).toLowerCase();
+
+    let mimeType = 'application/octet-stream';
+    if (ext === '.mp4') mimeType = 'video/mp4';
+    else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+    else if (ext === '.png') mimeType = 'image/png';
+    else if (ext === '.mov') mimeType = 'video/quicktime';
+
+    console.log(`[Publer] Uploading ${filename} as ${mimeType}`);
 
     const form = new FormData();
-    // Node.js Blob implementation requires Uint8Array or similar
-    const blob = new Blob([fileBuffer]);
+    const blob = new Blob([fileBuffer], { type: mimeType });
     form.append('file', blob, filename);
 
     const headers: Record<string, string> = {
@@ -93,11 +110,13 @@ export async function uploadMedia(
 
     if (!res.ok) {
         const err = await res.text();
+        console.error(`[Publer] Upload failed: ${res.status} ${err}`);
         throw new Error(`Upload failed: ${err}`);
     }
 
     const data = await res.json();
     if (!data.id) throw new Error("No media ID returned from Publer");
+    console.log(`[Publer] Upload success, Media ID: ${data.id}`);
     return data.id;
 }
 
@@ -106,20 +125,40 @@ export async function schedulePost(
         text: string;
         mediaIds: string[];
         accountIds: string[];
+        networkKeys: string[]; // e.g. ['instagram', 'linkedin']
         scheduledAt?: string;
     },
     creds: PublerCredentials
 ) {
+    // Construct the networks object (content per platform)
+    const networksPayload: Record<string, any> = {};
+    for (const netKey of postData.networkKeys) {
+        networksPayload[netKey] = {
+            type: 'video', // We are scheduling reels/videos
+            text: postData.text,
+            media: postData.mediaIds.map(id => ({ id, type: 'video' }))
+        };
+    }
+
+    // Construct accounts array with schedule times
+    const accountsPayload = postData.accountIds.map(id => ({
+        id,
+        scheduled_at: postData.scheduledAt
+    }));
+
     const payload = {
-        posts: [
-            {
-                text: postData.text,
-                media: postData.mediaIds,
-                accounts: postData.accountIds,
-                scheduled_at: postData.scheduledAt
-            }
-        ]
+        bulk: {
+            state: "scheduled",
+            posts: [
+                {
+                    networks: networksPayload,
+                    accounts: accountsPayload
+                }
+            ]
+        }
     };
+
+    console.log('[Publer] Scheduling Payload:', JSON.stringify(payload, null, 2));
 
     const headers: Record<string, string> = {
         'Authorization': `Bearer-API ${creds.apiKey}`,
@@ -129,7 +168,7 @@ export async function schedulePost(
         headers['Publer-Workspace-Id'] = creds.workspaceId;
     }
 
-    const res = await fetch(`${BASE_URL}/posts`, {
+    const res = await fetch(`${BASE_URL}/posts/schedule`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
@@ -137,10 +176,13 @@ export async function schedulePost(
 
     if (!res.ok) {
         const err = await res.text();
+        console.error(`[Publer] Scheduling failed: ${res.status} ${err}`);
         throw new Error(`Scheduling failed: ${err}`);
     }
 
-    return await res.json();
+    const data = await res.json();
+    console.log('[Publer] Scheduling Response:', JSON.stringify(data, null, 2));
+    return data;
 }
 
 export async function getPosts(

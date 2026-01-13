@@ -438,11 +438,21 @@ export async function scheduleBatchToPubler(
             // Upload
             const mediaId = await uploadMedia(videoPath, creds)
 
+            // Resolve Network Keys from Account Types
+            // We need to know which networks we are posting to (e.g. instagram, linkedin)
+            // to populate the 'networks' object in the API payload.
+            const allAccounts = await getAccounts(creds); // Cache this widely if possible, but okay for batch here
+            const selectedAccounts = allAccounts.filter(a => accountIds.includes(a.id));
+            const networkKeys = Array.from(new Set(selectedAccounts.map(a => a.type)));
+
+            console.log(`[Batch] Scheduling for networks: ${networkKeys.join(', ')}`);
+
             // Schedule
             const post = await schedulePost({
                 text: item.caption,
                 mediaIds: [mediaId],
                 accountIds: accountIds,
+                networkKeys: networkKeys,
                 scheduledAt: item.scheduledAt || undefined
             }, creds)
 
