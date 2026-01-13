@@ -621,16 +621,22 @@ def process_batch(job_id):
             processed_count += 1
             
             # Save incrementally
-            with open(jobs_file, 'w') as f:
+            # Atomic Write
+            temp_file = f"{jobs_file}.tmp.{os.getpid()}"
+            with open(temp_file, 'w') as f:
                 json.dump(db, f, indent=2)
+            os.replace(temp_file, jobs_file)
                 
         except subprocess.CalledProcessError as e:
             print(f"FFmpeg failed: {e.stderr.decode()}")
 
     # Update Job Status (Global)
     job['status'] = 'completed'
-    with open(jobs_file, 'w') as f:
+    # Atomic Write
+    temp_file = f"{jobs_file}.tmp.{os.getpid()}"
+    with open(temp_file, 'w') as f:
         json.dump(db, f, indent=2)
+    os.replace(temp_file, jobs_file)
 
     print(f"Batch processing complete. {processed_count} videos processed.")
 

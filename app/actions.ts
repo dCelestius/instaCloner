@@ -42,6 +42,12 @@ async function ensureDb() {
     }
 }
 
+async function atomicWriteJson(filePath: string, data: any) {
+    const tempPath = `${filePath}.tmp.${randomUUID()}`
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), "utf-8")
+    await fs.rename(tempPath, filePath)
+}
+
 interface ScrapedReel {
     id: string
     url: string // This might be a direct Googlevideo link (expiring) or similar. For robust apps, we'd act differently.
@@ -131,7 +137,7 @@ export async function createScrapeJob(formData: FormData) {
             reels: mappedReels
         }
 
-        await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+        await atomicWriteJson(DB_PATH, db)
 
     } catch (error: any) {
         console.error("Scraping failed:", error)
@@ -161,7 +167,7 @@ export async function createScrapeJob(formData: FormData) {
             reels: mockReels,
             isMock: true
         }
-        await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+        await atomicWriteJson(DB_PATH, db)
     }
 
     redirect(`/jobs/${jobId}`)
@@ -181,7 +187,7 @@ export async function updateJobReelCaptions(jobId: string, captions: Record<stri
         return r
     })
 
-    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+    await atomicWriteJson(DB_PATH, db)
     return { success: true }
 }
 
@@ -280,7 +286,7 @@ export async function startProcessingJob(formData: FormData) {
         db[jobId].config = config
     }
 
-    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+    await atomicWriteJson(DB_PATH, db)
 
     // FIRE AND FORGET - Spawn the python processing script
     const scriptPath = path.join(process.cwd(), "scripts", "process_batch.py")
@@ -332,13 +338,14 @@ export async function applyHeaderCorrection(jobId: string, correction: number) {
             // Generated captions/headlines can stay
         }))
 
-        await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+        await atomicWriteJson(DB_PATH, db)
 
         // Trigger processing
         const scriptPath = path.join(process.cwd(), "scripts", "process_batch.py")
         console.log(`[Correction] Spawning processing script: ${scriptPath} for ${jobId}`)
 
-        const child = exec(`python3 "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
+        const venvPython = path.join(process.cwd(), ".venv", "bin", "python3")
+        const child = exec(`"${venvPython}" "${scriptPath}" "${jobId}"`, (error, stdout, stderr) => {
             activeJobs.delete(jobId)
             if (error) console.error(`Processing script error for ${jobId}:`, stderr)
             else console.log(`Processing script success for ${jobId}:`, stdout)
@@ -373,7 +380,7 @@ export async function cancelJob(jobId: string) {
         // Only mark as canceled if it wasn't already completed
         if (db[jobId].status !== 'completed') {
             db[jobId].status = 'canceled'
-            await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8")
+            await atomicWriteJson(DB_PATH, db)
         }
     }
 
@@ -507,16 +514,39 @@ export async function scheduleBatchToPubler(
 
             console.log(`[Batch] Scheduling for networks: ${networkKeys.join(', ')}`);
 
-            // Schedule
-            const post = await schedulePost({
-                text: item.caption,
-                mediaIds: [mediaId],
-                accountIds: accountIds,
-                networkKeys: networkKeys,
-                scheduledAt: item.scheduledAt || undefined
-            }, creds)
+            // Schedule with Auto-Retry for conflicts
+            let attempts = 0
+            let scheduledTime = new Date(item.scheduledAt)
+            let success = false
+            let lastError = null
 
-            results.push({ reelId: item.reelId, status: "success", jobId: post.job_id })
+            while (attempts < 3 && !success) {
+                try {
+                    const post = await schedulePost({
+                        text: item.caption,
+                        mediaIds: [mediaId],
+                        accountIds: accountIds,
+                        networkKeys: networkKeys,
+                        scheduledAt: scheduledTime.toISOString()
+                    }, creds)
+
+                    results.push({ reelId: item.reelId, status: "success", jobId: post.job_id })
+                    success = true
+                } catch (err: any) {
+                    lastError = err
+                    // Check for strict "gap required" or "another post at this time" error
+                    if (err.message && (err.message.includes("gap is required") || err.message.includes("another post"))) {
+                        console.log(`[Batch] Scheduling conflict at ${scheduledTime.toISOString()}. Shifting +5 mins...`)
+                        scheduledTime.setMinutes(scheduledTime.getMinutes() + 5)
+                        attempts++
+                    } else {
+                        // Fatal error, don't retry
+                        throw err
+                    }
+                }
+            }
+
+            if (!success) throw lastError
 
         } catch (e: any) {
             console.error(e)

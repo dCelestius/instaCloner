@@ -1,0 +1,4 @@
+instaloader
+Pillow
+opencv-python-headless
+numpy
