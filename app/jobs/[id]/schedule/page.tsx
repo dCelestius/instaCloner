@@ -181,7 +181,16 @@ export default function SchedulePage() {
 
             // Start searching from...
             let searchTime = new Date(date)
-            searchTime.setHours(startHour, 0, 0, 0)
+
+            // Add deterministic organic variance (+/- 10 mins) based on date
+            // This ensures the same day always gets the same "random" start time
+            // to prevent jumping around during re-renders.
+            const dateSeed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate()
+            // Simple deterministic PRNG: sin(seed) -> fractional part -> map to [-10, 10]
+            const pseudoRandom = Math.sin(dateSeed) * 10000
+            const varianceMinutes = Math.floor((pseudoRandom - Math.floor(pseudoRandom)) * 21) - 10
+
+            searchTime.setHours(startHour, varianceMinutes, 0, 0)
 
             // Override search start if "Append" strategy pushes us forward
             if (globalSearchStart && searchTime.getTime() < globalSearchStart) {
