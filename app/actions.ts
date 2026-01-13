@@ -418,6 +418,24 @@ export async function createJobZip(jobId: string) {
     })
 }
 
+// Helper to upload a temp logo for preset saving
+export async function uploadTempLogo(formData: FormData) {
+    const file = formData.get("file") as File
+    if (!file) throw new Error("No file provided")
+
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    // Save to a temp location
+    const tempName = `temp_${randomUUID()}.png`
+    const tempPath = path.join(process.cwd(), "public", "downloads", tempName) // Borrowing downloads folder for temp
+
+    await ensureDb() // ensures downloads dir exists
+    await fs.writeFile(tempPath, buffer)
+
+    return { path: tempPath }
+}
+
 export async function getPresets() {
     try {
         await ensureDb()

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { SiteHeader } from "@/components/site-header"
 import { cn } from "@/lib/utils"
 // Server action
-import { getJob, startProcessingJob, getPresets, savePreset, deletePreset } from "@/app/actions"
+import { getJob, startProcessingJob, getPresets, savePreset, deletePreset, uploadTempLogo } from "@/app/actions"
 
 export default function ConfigurePage() {
     const params = useParams()
@@ -116,7 +116,8 @@ export default function ConfigurePage() {
 
         if (preset.designLogo) {
             setDesignLogo(preset.designLogo)
-            // Note: We don't set designLogoFile
+            // Reset file input because we loaded a URL
+            setDesignLogoFile(null)
         }
     }
 
@@ -132,7 +133,7 @@ export default function ConfigurePage() {
         if (!newPresetName.trim()) return
         setIsPreserving(true)
         try {
-            // Build Config object (same as formData but pure object)
+            // Build Config object
             const config = {
                 designName, designHandle, designBgColor, designOpacity,
                 logoSize, nameFontSize, nameColor, badgeSize,
@@ -140,39 +141,20 @@ export default function ConfigurePage() {
                 showHeadline, headlineMode, manualHeadline
             }
 
-            // We need to resolve logo path on server or upload new one?
-            // savePreset action expects a *path* to an existing logo if we want to copy it to persistent.
-            // BUT: designLogoFile is a File object. We can't pass File to server action in `savePreset(name, config, logoPath)`.
-            // Solution: 
-            // 1. If designLogoFile is set, we can't easily upload it via this simple action without FormData. 
-            //    Or we could upload it to a temp path first? No that's complex.
-            //    Wait, `designLogo` (string) might be a blob url (if new file) OR a server path (if from preset/disk).
-            //    If it's a server path, we can pass it.
-            //    If it's a blob URL, we actually need to UPLOAD the file to get it on server.
-            //    Since we aren't submitting the job yet, we don't have a job folder to dump it in easily?
-            //    Actually we do have `public/downloads/{jobId}`.
-            //    But for simplicity: Let's assume user uploads logo -> We rely on "Last Used" flow usually.
-            //    OR: We Update savePreset to handle logic? No.
-            //    
-            //    COMPROMISE: If user just uploaded a logo (Blob URL), saving preset might fail to persist that NEW logo unless we upload it.
-            //    However, `startProcessingJob` handles "Last Used" perfectly.
-            //    For explicit "Save Preset", let's ignore the NEW file if it's a Blob, and only support persisting if we have a path.
-            //    OR check if `designLogo` starts with `/` (server path). 
-            //    If it is a Blob, we warn user or just don't save the logo part?
-            //    Actually, we can't save the logo part if it's a blob. 
-            //    For now, let's just pass `undefined` as logoPath if it's a blob, and `designLogo` string if it's a path.
-
             let logoPathToSave: string | undefined = undefined
-            if (designLogo && !designLogo.startsWith("blob:")) {
-                // It's a server path, likely /persistent/... or /downloads/...
-                // We need to convert public URL to filesystem path for `fs.copyFile`?
-                // `savePreset` expects an absolute path or relative?
-                // Look at actions.ts: `if (logoPath) { ... await fs.copyFile(logoPath, ...)`
-                // It needs a FS path.
-                // Our `designLogo` is a URL like `/persistent/foo.png`.
-                // We need to map it back to `public/...`.
+
+            // 1. If we have a NEW file, upload it to temp first
+            if (designLogoFile) {
+                const formData = new FormData()
+                formData.append("file", designLogoFile)
+                const res = await uploadTempLogo(formData)
+                logoPathToSave = res.path
+            }
+            // 2. If no new file, but we have an existing URL (not blob), use it
+            else if (designLogo && !designLogo.startsWith("blob:")) {
+                // It's a server path, e.g. /persistent/... or /downloads/...
+                // Convert to filesystem path relative to CWD
                 logoPathToSave = "public" + designLogo
-                // Note: This relies on CWD being project root.
             }
 
             await savePreset(newPresetName, config, logoPathToSave)
